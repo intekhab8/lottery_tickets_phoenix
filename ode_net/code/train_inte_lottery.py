@@ -334,13 +334,13 @@ if __name__ == "__main__":
     rep_epochs_time_so_far = []
     rep_epochs_so_far = []
     consec_epochs_failed = 0
-    epochs_to_fail_to_terminate = 40#15
+    epochs_to_fail_to_terminate = 15
     all_lrs_used = []
 
     #print(get_true_val_set_r2(odenet, data_handler, settings['method'], settings['batch_type']))
     
     num_epochs_till_mask = 10
-    prune_perc = 0.15
+    prune_perc = 0.20
         
 
     for epoch in range(1, tot_epochs + 1):
@@ -355,7 +355,7 @@ if __name__ == "__main__":
                 if isinstance(module, torch.nn.Linear):
                     prune.l1_unstructured(module, name='weight', amount=prune_perc)
                     #prune.remove(module, name = "weight") #consider doing this and removing next line
-                    module.weight[module.weight_mask==1] == module.weight_orig[module.weight_mask==1] #resetting?? NAH!
+                    #module.weight[module.weight_mask==1] == module.weight_orig[module.weight_mask==1] #resetting?? NAH!
                     total_params += module.weight.nelement()
                     total_pruned += torch.sum(module.weight == 0)
             print("Updated mask! Current perc pruned: {:.2%}, num pruned: {}".format(total_pruned/total_params, total_pruned))

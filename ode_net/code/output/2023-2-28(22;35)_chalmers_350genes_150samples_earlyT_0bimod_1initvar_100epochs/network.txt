@@ -24,3 +24,5 @@ ODENet(
 
 lambda at start (first 5 epochs) = 1
 and then lambda = 1
+
+prune_perc = 0.05
