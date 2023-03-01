@@ -3,7 +3,7 @@ library(ggplot2)
 library(stringr)
 
 print("reading in files")
-effects_mat <- fread("/home/ubuntu/neural_ODE/ode_net/code/model_inspect/effects_mat_0.025.csv")
+effects_mat <- fread("/home/ubuntu/lottery_tickets_phoenix/ode_net/code/model_inspect/effects_mat.csv")
 gene_eff <- as.data.table(effects_mat)
 num_genes <- dim(effects_mat)[1]
 print(dim(effects_mat))
@@ -16,7 +16,7 @@ gene_eff <- melt(gene_eff,
                  variable.name = "aff", value.name = "effect")
 gene_eff[,aff := gsub("V","",aff)]
 
-cell_names <- data.table(read.delim("/home/ubuntu/neural_ODE/ode_net/code/markdown_items/gene_names_350.csv",
+cell_names <- data.table(read.delim("/home/ubuntu/lottery_tickets_phoenix/ode_net/code/markdown_items/gene_names_350.csv",
                          sep = ",",
                          header = T))
 cell_names[,x:= gsub("_input","", x)]
@@ -30,10 +30,10 @@ gene_eff[,aff := cell_names[as.numeric(aff),gene]]
 print("calculating prop_effects")
 gene_eff[, prop_effect := abs(effect)/(sum(abs(effect))), by = aff]
 gene_eff[is.na(prop_effect), prop_effect :=0 ]
-gene_eff[, effect := NULL]
+#gene_eff[, effect := NULL]
 
 print("getting true edges")
-true_edges <- fread("/home/ubuntu/neural_ODE/ode_net/code/markdown_items/edge_properties_350.csv")
+true_edges <- fread("/home/ubuntu/lottery_tickets_phoenix/ode_net/code/markdown_items/edge_properties_350.csv")
 
 #true_edges <- true_edges[p_val < 0.001,]
 #true_edges[, num_edges_for_this_TF := .N, by = from]
@@ -43,8 +43,11 @@ true_edges <- fread("/home/ubuntu/neural_ODE/ode_net/code/markdown_items/edge_pr
 setnames(true_edges, 
          old = c("from","to"),
          new = c("reg","aff"))
-true_edges[, activation_sym := "known_edge"]
+true_edges[, activation_sym := activation]
 gene_eff <- merge(gene_eff, true_edges, by = c("reg","aff"), all.x = TRUE)
+
+gene_eff[, .(avg_pred_effect = mean(effect), .N),
+           by = .(activation_sym)]
 
 #gene_eff[,reg:= NULL]
 #gene_eff[,aff:= NULL]
@@ -62,8 +65,8 @@ print(paste("AUC =", PRROC_obj$auc))
 
  prop_cut_off <- PRROC_obj$curve[best_index,3]
  
- gene_eff[, .(avg_pred_effect = mean(prop_effect), .N),
-           by = .(activation_sym)]
+ #gene_eff[, .(avg_pred_effect = mean(prop_effect), .N),
+ #          by = .(activation_sym)]
 
  gene_eff[,pred_effect := "no_effect"]
  gene_eff[prop_effect > prop_cut_off, 
@@ -80,6 +83,7 @@ dev.off()
 
 print(paste("Sparsity (avg out degree):" , 
             gene_eff[pred_effect == "pred_effect", .N, by = reg][, sum(N)/num_genes]))
+
 
 print("doing centrality stuff now")
 library(igraph, quietly = T,  warn.conflicts = F)
@@ -104,7 +108,7 @@ library(CINNA, quietly = T,  warn.conflicts = F)
  harm_cent_plot <- data.table(gene = names(h_cent_all), h_cent = h_cent_all)
 
 #  harm_cent_to_write <- harm_cent_plot[order(-h_cent),]#[1:100]
-#  write.csv(harm_cent_to_write, "/home/ubuntu/neural_ODE/ode_net/code/markdown_items/harm_cents.csv", row.names = F)
+#  write.csv(harm_cent_to_write, "/home/ubuntu/lottery_tickets_phoenix/ode_net/code/markdown_items/harm_cents.csv", row.names = F)
 
 
  plot_subset <- harm_cent_plot[order(-h_cent)][1:15]
