@@ -329,7 +329,7 @@ if __name__ == "__main__":
 
     #print(get_true_val_set_r2(odenet, data_handler, settings['method'], settings['batch_type']))
     
-    num_epochs_till_mask = 10
+    num_epochs_till_mask = 20
     prune_perc = 0.20
     masking_start_epoch = 20
     inital_hit_perc = 0.5
@@ -357,7 +357,7 @@ if __name__ == "__main__":
             total_params = 0
             for name, module in odenet.named_modules():
                 if isinstance(module, torch.nn.Linear):
-                    if epoch == masking_start_epoch:
+                    if epoch == masking_start_epoch or epoch == 40:
                         prune.l1_unstructured(module, name='weight', amount=inital_hit_perc) #huge pruning at first
                     else:
                         prune.l1_unstructured(module, name='weight', amount=prune_perc)
