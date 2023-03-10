@@ -251,16 +251,6 @@ if __name__ == "__main__":
         odenet.load(pretrained_model_file)
         #print("Loaded in pre-trained model!")
         
-    with open('{}/network.txt'.format(output_root_dir), 'w') as net_file:
-        net_file.write(odenet.__str__())
-        net_file.write('\n\n\n')
-        net_file.write(inspect.getsource(ODENet.forward))
-        net_file.write('\n')
-        net_file.write('lambda at start (first 5 epochs) = {}'.format(loss_lambda_at_start))
-        net_file.write('\n')
-        net_file.write('and then lambda = {}'.format(loss_lambda_at_end))
-        
-
     #quit()
 
     # Select optimizer
@@ -341,19 +331,36 @@ if __name__ == "__main__":
     
     num_epochs_till_mask = 10
     prune_perc = 0.20
+    masking_start_epoch = 20
+    inital_hit_perc = 0.5
         
+    with open('{}/network.txt'.format(output_root_dir), 'w') as net_file:
+        net_file.write(odenet.__str__())
+        net_file.write('\n\n\n')
+        net_file.write(inspect.getsource(ODENet.forward))
+        net_file.write('\n')
+        net_file.write('lambda at start (first 5 epochs) = {}'.format(loss_lambda_at_start))
+        net_file.write('\n')
+        net_file.write('and then lambda = {}'.format(loss_lambda_at_end))
+        net_file.write('\n\n')
+        net_file.write('prune_perc = {} every {} epochs, starting at {} epochs (init hit = {})'.format(prune_perc, num_epochs_till_mask, masking_start_epoch, inital_hit_perc))
+        
+
 
     for epoch in range(1, tot_epochs + 1):
         print()
         print("[Running epoch {}/{}]".format(epoch, settings['epochs']))
 
         #Iterative magnitude pruning (IMP for lottery tickets)
-        if (epoch > 0 and epoch < tot_epochs and epoch % num_epochs_till_mask == 0):
+        if (epoch >= masking_start_epoch  and epoch < tot_epochs and epoch % num_epochs_till_mask == 0):
             total_pruned = 0
             total_params = 0
             for name, module in odenet.named_modules():
                 if isinstance(module, torch.nn.Linear):
-                    prune.l1_unstructured(module, name='weight', amount=prune_perc)
+                    if epoch == masking_start_epoch:
+                        prune.l1_unstructured(module, name='weight', amount=inital_hit_perc) #huge pruning at first
+                    else:
+                        prune.l1_unstructured(module, name='weight', amount=prune_perc)
                     #prune.remove(module, name = "weight") #consider doing this and removing next line
                     #module.weight[module.weight_mask==1] == module.weight_orig[module.weight_mask==1] #resetting?? NAH!
                     total_params += module.weight.nelement()
