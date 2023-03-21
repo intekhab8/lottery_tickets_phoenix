@@ -75,7 +75,7 @@ def get_true_val_set_r2(odenet, data_handler, method, batch_type):
         #    predictions[index, :, :] = odeint(odenet, batch_point, time, method=method)[1:] 
         #var_explained_init_val_based = my_r_squared(predictions, target)
     
-    return [var_explained_pw, true_val_mse]
+    return [var_explained_pw, true_val_mse, t_pw]
 
 
 def read_prior_matrix(prior_mat_file_loc, sparse = False, num_genes = 11165):
@@ -132,7 +132,7 @@ def validation(odenet, data_handler, method, explicit_time):
         loss = torch.mean((predictions - targets)**2)
         #print("gene_mult_mean =", torch.mean(torch.relu(odenet.gene_multipliers) + 0.1))
         
-    return [loss, n_val]
+    return [loss, n_val, t]
 
 def true_loss(odenet, data_handler, method):
     return [0,0]
@@ -257,8 +257,8 @@ if __name__ == "__main__":
     batch_for_prior = (torch.rand(10000,1,prior_mat.shape[0], device = data_handler.device) - 0.5)
     prior_grad = torch.matmul(batch_for_prior,prior_mat) #can be any model here that predicts the derivative
     del prior_mat
-    loss_lambda_at_start = 0.99
-    loss_lambda_at_end = 0.99
+    loss_lambda_at_start = 1#0.99
+    loss_lambda_at_end = 1#0.99
     
     # Initialization
     odenet = ODENet(device, data_handler.dim, explicit_time=settings['explicit_time'], neurons = settings['neurons_per_layer'], 
@@ -359,8 +359,10 @@ if __name__ == "__main__":
     epochs_to_fail_to_terminate = 40#15
     all_lrs_used = []
 
-    #print(get_true_val_set_r2(odenet, data_handler, settings['method'], settings['batch_type']))
-    
+    #pw_stuff = get_true_val_set_r2(odenet, data_handler, settings['method'], settings['batch_type'])
+    #traj_stuff = validation(odenet, data_handler, settings['method'], settings['explicit_time'])
+
+
     for epoch in range(1, tot_epochs + 1):
             
         start_epoch_time = perf_counter()

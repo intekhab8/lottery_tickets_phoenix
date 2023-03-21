@@ -244,10 +244,42 @@ if __name__ == "__main__":
     batch_for_prior = (torch.rand(10000,1,prior_mat.shape[0], device = data_handler.device) - 0.5)
     prior_grad = torch.matmul(batch_for_prior,prior_mat) #can be any model here that predicts the derivative
     del prior_mat
-    loss_lambda_at_start = 0.99
-    loss_lambda_at_end = 0.99
+    loss_lambda_at_start =  1
+    loss_lambda_at_end = 1
     
-    # Initialization
+    # Initialization of prior NN
+    odenet_prior = ODENet(device, data_handler.dim, explicit_time=settings['explicit_time'], neurons = settings['neurons_per_layer'], 
+                    log_scale = settings['log_scale'], init_bias_y = settings['init_bias_y'])
+    odenet_prior.float()
+    
+    print('Using optimizer: {}'.format(settings['optimizer']))
+    if settings['optimizer'] == 'rmsprop':
+        opt = optim.RMSprop(odenet_prior.parameters(), lr=settings['init_lr'], weight_decay=settings['weight_decay'])
+    elif settings['optimizer'] == 'sgd':
+        opt = optim.SGD(odenet_prior.parameters(), lr=settings['init_lr'], weight_decay=settings['weight_decay'])
+    elif settings['optimizer'] == 'adagrad':
+        opt = optim.Adagrad(odenet_prior.parameters(), lr=settings['init_lr'], weight_decay=settings['weight_decay'])
+    else:
+#       opt = optim.Adam(odenet.parameters(), lr=settings['init_lr'], weight_decay=settings['weight_decay'])
+        num_gene = data_handler.dim
+        opt = optim.Adam([
+                {'params': odenet_prior.net_sums.linear_out.weight}, 
+                {'params': odenet_prior.net_sums.linear_out.bias},
+                {'params': odenet_prior.net_prods.linear_out.weight},
+                {'params': odenet_prior.net_prods.linear_out.bias},
+                {'params': odenet_prior.net_alpha_combine.linear_out.weight}
+            #    {'params': odenet_prior.gene_multipliers,'lr': 0}
+                
+            ],  lr=settings['init_lr'], weight_decay=settings['weight_decay'])
+
+    print("PRE TRAINING PRIOR MODEL")
+    for epoch in range(3000):
+        #print(epoch)
+        my_prior_loss = training_step_prior_model(odenet_prior, opt, batch_for_prior, prior_grad)
+        if epoch%30 ==0:
+            print("{:.2E}".format(my_prior_loss))
+
+    print("NOW MAKE THE REAL ODENet to be trained and pruned")
     odenet = ODENet(device, data_handler.dim, explicit_time=settings['explicit_time'], neurons = settings['neurons_per_layer'], 
                     log_scale = settings['log_scale'], init_bias_y = settings['init_bias_y'])
     odenet.float()
@@ -272,14 +304,6 @@ if __name__ == "__main__":
                 
             ],  lr=settings['init_lr'], weight_decay=settings['weight_decay'])
 
-    print("PRE TRAINING PRIOR MODEL")
-    for epoch in range(3000):
-        #print(epoch)
-        my_prior_loss = training_step_prior_model(odenet, opt, batch_for_prior, prior_grad)
-        if epoch%30 ==0:
-            print("{:.2E}".format(my_prior_loss))
-
-    quit()
 
 
     if settings['pretrained_model']:
@@ -295,6 +319,8 @@ if __name__ == "__main__":
         net_file.write('lambda at start (first 5 epochs) = {}'.format(loss_lambda_at_start))
         net_file.write('\n')
         net_file.write('and then lambda = {}'.format(loss_lambda_at_end))
+        net_file.write('\n')
+        net_file.write('causal lottery!')
         
 
     #quit()
@@ -370,12 +396,15 @@ if __name__ == "__main__":
             total_params = 0
             for name, module in odenet.named_modules():
                 if isinstance(module, torch.nn.Linear):
-                    prune.l1_unstructured(module, name='weight', amount=prune_perc)
+                    my_custom_weights = torch.abs(eval("odenet_prior."+name).weight.detach())
+                    my_convex_combo = 0 #implement
+                    prune.l1_unstructured(module, name='weight', amount=prune_perc, importance_scores = my_custom_weights)
+                    
                     #prune.remove(module, name = "weight") #consider doing this and removing next line
                     #module.weight[module.weight_mask==1] == module.weight_orig[module.weight_mask==1] #resetting?? NAH!
                     total_params += module.weight.nelement()
                     total_pruned += torch.sum(module.weight == 0)
-            print("Updated mask! Current perc pruned: {:.2%}, num pruned: {}".format(total_pruned/total_params, total_pruned))
+            print("Updated mask based on prior! Current perc pruned: {:.2%}, num pruned: {}".format(total_pruned/total_params, total_pruned))
             
             
         start_epoch_time = perf_counter()

@@ -255,6 +255,7 @@ class DataHandler:
         if batch_type == "trajectory":
             if val_only:
                 all_indx = [self.indx[x] for x in np.arange(len(self.indx)) if self.indx[x][0] in  self.val_set_indx]
+                all_indx = sorted(all_indx, key=lambda x: np.where(self.val_set_indx == x[0]))
             else:
                 all_indx = [self.indx[x] for x in np.arange(len(self.indx))]
         if batch_type == "single":
@@ -363,10 +364,11 @@ class DataHandler:
             for i in self.val_set_indx:
                 self.val_data.append(self.data_pt[i][0:-1]) 
                 self.val_target.append(self.data_pt[i][1::])
-                self.val_t.append(self.time_pt[i])
-            self.val_data = torch.stack(self.val_data, dim = 0).to(self.device) #IH addition
-            self.val_target = torch.stack(self.val_target, dim = 0).to(self.device) #IH addition
-            self.val_t = torch.stack(self.val_t, dim = 0).to(self.device) #IH addition
+                self.val_t.append(torch.stack([torch.stack((self.time_pt[i][s], self.time_pt[i][s +1])) for s in range(len(self.time_pt[i])-1)]))
+                #self.val_t.append(self.time_pt[i]) IH commented out and added line above for traj method 3/21/23
+            self.val_data = torch.cat(self.val_data, dim = 0).to(self.device) 
+            self.val_target = torch.cat(self.val_target, dim = 0).to(self.device) 
+            self.val_t = torch.cat(self.val_t, dim = 0).to(self.device) 
 
             
 

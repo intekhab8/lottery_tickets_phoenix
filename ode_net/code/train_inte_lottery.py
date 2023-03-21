@@ -81,6 +81,8 @@ def read_prior_matrix(prior_mat_file_loc, sparse = False, num_genes = 11165):
 
 def validation(odenet, data_handler, method, explicit_time):
     data, t, target_full, n_val = data_handler.get_validation_set()
+    if method == "trajectory":
+        False
 
     init_bias_y = data_handler.init_bias_y
     #odenet.eval()
@@ -91,12 +93,12 @@ def validation(odenet, data_handler, method, explicit_time):
         for index, (time, batch_point, target_point) in enumerate(zip(t, data, target_full)):
             #IH: 9/10/2021 - added these to handle unequal time availability 
             #comment these out when not requiring nan-value checking
+            #not_nan_idx = [i for i in range(len(time)) if not torch.isnan(time[i])]
+            #time = time[not_nan_idx]
+            #not_nan_idx.pop()
+            #batch_point = batch_point[not_nan_idx]
+            #target_point = target_point[not_nan_idx]
             
-            not_nan_idx = [i for i in range(len(time)) if not torch.isnan(time[i])]
-            time = time[not_nan_idx]
-            not_nan_idx.pop()
-            batch_point = batch_point[not_nan_idx]
-            target_point = target_point[not_nan_idx]
             # Do prediction
             predictions.append(odeint(odenet, batch_point, time, method=method)[1])
             targets.append(target_point) #IH comment
@@ -150,7 +152,7 @@ def training_step(odenet, data_handler, opt, method, batch_size, explicit_time, 
     opt.zero_grad()
     predictions = torch.zeros(batch.shape).to(data_handler.device)
     for index, (time, batch_point) in enumerate(zip(t, batch)):
-        predictions[index, :, :] = odeint(odenet, batch_point, time, method= method  )[1] + init_bias_y #IH comment
+        predictions[index, :, :] = odeint(odenet, batch_point, time, method= method  )[1] #IH comment
     
     loss_data = torch.mean((predictions - target)**2) 
     
@@ -324,15 +326,15 @@ if __name__ == "__main__":
     rep_epochs_time_so_far = []
     rep_epochs_so_far = []
     consec_epochs_failed = 0
-    epochs_to_fail_to_terminate = 15
+    epochs_to_fail_to_terminate = 999
     all_lrs_used = []
 
     #print(get_true_val_set_r2(odenet, data_handler, settings['method'], settings['batch_type']))
     
-    num_epochs_till_mask = 20
-    prune_perc = 0.20
-    masking_start_epoch = 20
-    inital_hit_perc = 0.5
+    num_epochs_till_mask = 5
+    prune_perc = 0.05
+    masking_start_epoch = 0
+    inital_hit_perc = 0#0.75
         
     with open('{}/network.txt'.format(output_root_dir), 'w') as net_file:
         net_file.write(odenet.__str__())
@@ -346,6 +348,7 @@ if __name__ == "__main__":
         net_file.write('prune_perc = {} every {} epochs, starting at {} epochs (init hit = {})'.format(prune_perc, num_epochs_till_mask, masking_start_epoch, inital_hit_perc))
         
 
+    traj_stuff = validation(odenet, data_handler, settings['method'], settings['explicit_time'])
 
     for epoch in range(1, tot_epochs + 1):
         print()
@@ -357,7 +360,7 @@ if __name__ == "__main__":
             total_params = 0
             for name, module in odenet.named_modules():
                 if isinstance(module, torch.nn.Linear):
-                    if epoch == masking_start_epoch or epoch == 40:
+                    if epoch == masking_start_epoch:
                         prune.l1_unstructured(module, name='weight', amount=inital_hit_perc) #huge pruning at first
                     else:
                         prune.l1_unstructured(module, name='weight', amount=prune_perc)
