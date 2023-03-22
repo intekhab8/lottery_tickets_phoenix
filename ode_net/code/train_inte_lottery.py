@@ -279,7 +279,7 @@ if __name__ == "__main__":
 
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(opt, mode='min', 
     factor=0.9, patience=3, threshold=1e-06, 
-    threshold_mode='abs', cooldown=0, min_lr=0, eps=1e-09, verbose=True)
+    threshold_mode='abs', cooldown=0, min_lr=5e-04, eps=1e-09, verbose=True)
 
     
     # Init plot
@@ -329,12 +329,11 @@ if __name__ == "__main__":
     epochs_to_fail_to_terminate = 999
     all_lrs_used = []
 
-    #print(get_true_val_set_r2(odenet, data_handler, settings['method'], settings['batch_type']))
     
-    num_epochs_till_mask = 5
-    prune_perc = 0.05
-    masking_start_epoch = 0
-    inital_hit_perc = 0#0.75
+    num_epochs_till_mask = 20
+    prune_perc = 0.20
+    masking_start_epoch = 20
+    inital_hit_perc = 0.50
         
     with open('{}/network.txt'.format(output_root_dir), 'w') as net_file:
         net_file.write(odenet.__str__())
@@ -347,8 +346,8 @@ if __name__ == "__main__":
         net_file.write('\n\n')
         net_file.write('prune_perc = {} every {} epochs, starting at {} epochs (init hit = {})'.format(prune_perc, num_epochs_till_mask, masking_start_epoch, inital_hit_perc))
         
-
-    traj_stuff = validation(odenet, data_handler, settings['method'], settings['explicit_time'])
+    #print(get_true_val_set_r2(odenet, data_handler, settings['method'], settings['batch_type']))
+    #traj_stuff = validation(odenet, data_handler, settings['method'], settings['explicit_time'])
 
     for epoch in range(1, tot_epochs + 1):
         print()
@@ -436,7 +435,7 @@ if __name__ == "__main__":
             A_list.append(A)
             print('A =\n{}'.format(A))
 
-        #handle true-mu loss
+        print("Overall training loss {:.5E}".format(train_loss))
        
         if data_handler.n_val > 0:
             val_loss_list = validation(odenet, data_handler, settings['method'], settings['explicit_time'])
@@ -463,8 +462,7 @@ if __name__ == "__main__":
             print("Validation loss {:.5E}, using {} points".format(val_loss, val_loss_list[1]))
             scheduler.step(val_loss)
 
-        print("Overall training loss {:.5E}".format(train_loss))
-
+        
         print("True MSE of val traj (pairwise): {:.5E}".format(mu_loss[1]))
         print("True R^2 of val traj (pairwise): {:.2%}".format(mu_loss[0]))
 
