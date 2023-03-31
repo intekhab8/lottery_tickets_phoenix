@@ -81,7 +81,7 @@ class ODENet(nn.Module):
           
           
             self.gene_multipliers = nn.Parameter(torch.rand(1,ndim), requires_grad= True)
-            #self.gene_multipliers = nn.Parameter(torch.ones(ndim), requires_grad= True)
+            #self.gene_multipliers = nn.Parameter(torch.zeros(ndim, requires_grad= True))
                 
         # Initialize the layers of the model
         for n in self.net_sums.modules():

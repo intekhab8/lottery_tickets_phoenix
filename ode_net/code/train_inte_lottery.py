@@ -25,7 +25,7 @@ from read_config import read_arguments_from_file
 from solve_eq import solve_eq
 from visualization_inte import *
 
-#torch.set_num_threads(16) #CHANGE THIS!
+torch.set_num_threads(36) #CHANGE THIS!
 
 def plot_MSE(epoch_so_far, training_loss, validation_loss, true_mean_losses, true_mean_losses_init_val_based, prior_losses ,img_save_dir):
     plt.figure()
@@ -128,13 +128,22 @@ def true_loss(odenet, data_handler, method):
     return loss
 
 
-def decrease_lr(opt, verbose, tot_epochs, epoch, lower_lr,  dec_lr_factor ):
-    dir_string = "Decreasing"
+def reset_lr(opt, verbose, old_lr):
+    dir_string = "Increasing"
+    group_count = 0
     for param_group in opt.param_groups:
-        param_group['lr'] = param_group['lr'] * dec_lr_factor
-    if verbose:
-        print(dir_string,"learning rate to: %f" % opt.param_groups[0]['lr'])
+        group_count += 1 #gene_mult!
+        param_group['lr'] = old_lr 
+        if group_count == 6:
+            param_group['lr'] = 5*old_lr 
+        if verbose:
+            print(dir_string,"learning rate to: %f" % param_group['lr'])
 
+def setOptimizerLRScheduler(patience):
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(opt, mode='min', 
+                                                     factor=0.9, patience=patience, threshold=1e-06, 
+                                                     threshold_mode='abs', cooldown=0, min_lr=4e-04, eps=1e-09, verbose=True)
+    return scheduler
 
 
 def training_step(odenet, data_handler, opt, method, batch_size, explicit_time, relative_error, batch_for_prior, prior_grad, loss_lambda):
@@ -237,8 +246,8 @@ if __name__ == "__main__":
     batch_for_prior = (torch.rand(10000,1,prior_mat.shape[0], device = data_handler.device) - 0.5)
     prior_grad = torch.matmul(batch_for_prior,prior_mat) #can be any model here that predicts the derivative
     del prior_mat
-    loss_lambda_at_start = 0.99
-    loss_lambda_at_end = 0.99
+    loss_lambda_at_start = 1#0.99
+    loss_lambda_at_end = 1#0.99
     
     # Initialization
     odenet = ODENet(device, data_handler.dim, explicit_time=settings['explicit_time'], neurons = settings['neurons_per_layer'], 
@@ -253,10 +262,10 @@ if __name__ == "__main__":
         odenet.load(pretrained_model_file)
         #print("Loaded in pre-trained model!")
         
-    #quit()
-
-    # Select optimizer
+    
+    # Select optimizer and set LR scheduler
     print('Using optimizer: {}'.format(settings['optimizer']))
+    global opt
     if settings['optimizer'] == 'rmsprop':
         opt = optim.RMSprop(odenet.parameters(), lr=settings['init_lr'], weight_decay=settings['weight_decay'])
     elif settings['optimizer'] == 'sgd':
@@ -264,23 +273,15 @@ if __name__ == "__main__":
     elif settings['optimizer'] == 'adagrad':
         opt = optim.Adagrad(odenet.parameters(), lr=settings['init_lr'], weight_decay=settings['weight_decay'])
     else:
-#       opt = optim.Adam(odenet.parameters(), lr=settings['init_lr'], weight_decay=settings['weight_decay'])
-        num_gene = data_handler.dim
         opt = optim.Adam([
-                {'params': odenet.net_sums.linear_out.weight}, 
-                {'params': odenet.net_sums.linear_out.bias},
-                {'params': odenet.net_prods.linear_out.weight},
-                {'params': odenet.net_prods.linear_out.bias},
-                {'params': odenet.net_alpha_combine.linear_out.weight},
+                {'params': odenet.net_sums.linear_out.weight,'lr': settings['init_lr']}, 
+                {'params': odenet.net_sums.linear_out.bias,'lr': settings['init_lr']},
+                {'params': odenet.net_prods.linear_out.weight,'lr': settings['init_lr']},
+                {'params': odenet.net_prods.linear_out.bias,'lr': settings['init_lr']},
+                {'params': odenet.net_alpha_combine.linear_out.weight,'lr': settings['init_lr']},
                 {'params': odenet.gene_multipliers,'lr': 5*settings['init_lr']}
-                
             ],  lr=settings['init_lr'], weight_decay=settings['weight_decay'])
-
-
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(opt, mode='min', 
-    factor=0.9, patience=3, threshold=1e-06, 
-    threshold_mode='abs', cooldown=0, min_lr=5e-04, eps=1e-09, verbose=True)
-
+    
     
     # Init plot
     if settings['viz']:
@@ -315,7 +316,7 @@ if __name__ == "__main__":
     
     tot_epochs = settings['epochs']
     #viz_epochs = [round(tot_epochs*1/5), round(tot_epochs*2/5), round(tot_epochs*3/5), round(tot_epochs*4/5),tot_epochs]
-    rep_epochs = [1, 5, 7, 10, 15, 25, 30, 40, 50, 60, 70, 80, 100, 120, 150, 180, 200,220, 240, 300, 350, tot_epochs]
+    rep_epochs = [1, 5, 7, 10, 15, 25, 30, 40, 50, 60, 70, 80, 100, 120, 150, 180, 200,220, 240, 300, 350, 380, 400, 420, 450, 480, 500, 530, 550, tot_epochs]
     viz_epochs = rep_epochs
     zeroth_drop_done = False
     first_drop_done = False 
@@ -326,14 +327,19 @@ if __name__ == "__main__":
     rep_epochs_time_so_far = []
     rep_epochs_so_far = []
     consec_epochs_failed = 0
-    epochs_to_fail_to_terminate = 999
+    epochs_to_fail_to_terminate = 15 #$999
     all_lrs_used = []
 
     
-    num_epochs_till_mask = 20
-    prune_perc = 0.20
-    masking_start_epoch = 20
-    inital_hit_perc = 0.50
+    masking_start_epoch = 0
+    inital_hit_perc = 0
+    num_epochs_till_mask = 999999 #i.e. no fixed pruning schedule
+    lr_schedule_patience = 3 #$2 #very aggressive
+    min_lr_before_prune = 0.00000000000000000000001 #$0.0006
+    prune_perc = 0.30 #very aggressive
+
+    scheduler = setOptimizerLRScheduler(patience=lr_schedule_patience)
+    
         
     with open('{}/network.txt'.format(output_root_dir), 'w') as net_file:
         net_file.write(odenet.__str__())
@@ -345,7 +351,12 @@ if __name__ == "__main__":
         net_file.write('and then lambda = {}'.format(loss_lambda_at_end))
         net_file.write('\n\n')
         net_file.write('prune_perc = {} every {} epochs, starting at {} epochs (init hit = {})'.format(prune_perc, num_epochs_till_mask, masking_start_epoch, inital_hit_perc))
+        net_file.write('\n\n')
+        net_file.write('also, prune_perc = {}, if we ever reach LR = {}'.format(prune_perc, min_lr_before_prune))
+        net_file.write('\n\n')
+        net_file.write('we reset LR back to initial vals after any pruning step')
         
+
     #print(get_true_val_set_r2(odenet, data_handler, settings['method'], settings['batch_type']))
     #traj_stuff = validation(odenet, data_handler, settings['method'], settings['explicit_time'])
 
@@ -368,7 +379,9 @@ if __name__ == "__main__":
                     total_params += module.weight.nelement()
                     total_pruned += torch.sum(module.weight == 0)
             print("Updated mask! Current perc pruned: {:.2%}, num pruned: {}".format(total_pruned/total_params, total_pruned))
-            
+            consec_epochs_failed = 0
+            reset_lr(opt, True, settings['init_lr']) #, 
+            scheduler = setOptimizerLRScheduler(patience = lr_schedule_patience)
             
         start_epoch_time = perf_counter()
         iteration_counter = 1
@@ -475,16 +488,8 @@ if __name__ == "__main__":
                 visualizer.plot()
                 visualizer.save(img_save_dir, epoch)
         
-        #print("Saving intermediate model")
-        #save_model(odenet, intermediate_models_dir, 'model_at_epoch{}'.format(epoch))
     
-        # Decrease learning rate if specified
-        if settings['dec_lr'] : #and epoch % settings['dec_lr'] == 0
-            decrease_lr(opt, True,tot_epochs= tot_epochs,
-             epoch = epoch, lower_lr = settings['init_lr'], dec_lr_factor = settings['dec_lr_factor'])
-        
 
-        #val_loss < (0.01 * settings['scale_expression'])**1
         if (epoch in rep_epochs) or (consec_epochs_failed == epochs_to_fail_to_terminate):
             print()
             rep_epochs_so_far.append(epoch)
@@ -506,9 +511,6 @@ if __name__ == "__main__":
             print("Saving MSE plot...")
             plot_MSE(epoch, training_loss, validation_loss, true_mean_losses, true_mean_losses_init_val_based, prior_losses, img_save_dir)    
             
-            if settings['lr_range_test']:
-                plot_LR_range_test(all_lrs_used, training_loss, img_save_dir)
-
             print("Saving losses..")
             if data_handler.n_val > 0:
                 L = [rep_epochs_so_far, rep_epochs_time_so_far, rep_epochs_train_losses, rep_epochs_val_losses, rep_epochs_mu_losses]
@@ -524,14 +526,24 @@ if __name__ == "__main__":
             #    np.savetxt('{}rep_epoch_losses.csv'.format(output_root_dir), np.transpose(L), delimiter=',')    
            
         
-
-        if consec_epochs_failed==epochs_to_fail_to_terminate:
-            print("Went {} epochs without improvement; terminating.".format(epochs_to_fail_to_terminate))
-            break
-
-        #if data_handler.n_val > 0 & val_loss < (0.01 * settings['scale_expression'])**1:
-        #    print("SUCCESS! Reached validation target; terminating.")
-        #    break    
+        this_lr_for_param_grp_0 = opt.param_groups[0]['lr']
+        if this_lr_for_param_grp_0 < min_lr_before_prune:
+            print("Crossed {}, which is the min LR; pruning.".format(min_lr_before_prune))
+            total_pruned = 0
+            total_params = 0
+            for name, module in odenet.named_modules():
+                if isinstance(module, torch.nn.Linear):
+                    if epoch == masking_start_epoch:
+                        prune.l1_unstructured(module, name='weight', amount=inital_hit_perc) #huge pruning at first
+                    else:
+                        prune.l1_unstructured(module, name='weight', amount=prune_perc)
+                    total_params += module.weight.nelement()
+                    total_pruned += torch.sum(module.weight == 0)
+            print("Updated mask! Current perc pruned: {:.2%}, num pruned: {}".format(total_pruned/total_params, total_pruned))
+            consec_epochs_failed = 0
+            reset_lr(opt, True, settings['init_lr']) #, 
+            scheduler = setOptimizerLRScheduler(patience = lr_schedule_patience)
+            
 
     total_time = perf_counter() - start_time
 

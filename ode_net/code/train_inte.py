@@ -104,6 +104,8 @@ def regulated_loss(predictions, target, time, val = False):
 
 def validation(odenet, data_handler, method, explicit_time):
     data, t, target_full, n_val = data_handler.get_validation_set()
+    if method == "trajectory":
+        False
 
     init_bias_y = data_handler.init_bias_y
     #odenet.eval()
@@ -114,12 +116,12 @@ def validation(odenet, data_handler, method, explicit_time):
         for index, (time, batch_point, target_point) in enumerate(zip(t, data, target_full)):
             #IH: 9/10/2021 - added these to handle unequal time availability 
             #comment these out when not requiring nan-value checking
+            #not_nan_idx = [i for i in range(len(time)) if not torch.isnan(time[i])]
+            #time = time[not_nan_idx]
+            #not_nan_idx.pop()
+            #batch_point = batch_point[not_nan_idx]
+            #target_point = target_point[not_nan_idx]
             
-            not_nan_idx = [i for i in range(len(time)) if not torch.isnan(time[i])]
-            time = time[not_nan_idx]
-            not_nan_idx.pop()
-            batch_point = batch_point[not_nan_idx]
-            target_point = target_point[not_nan_idx]
             # Do prediction
             predictions.append(odeint(odenet, batch_point, time, method=method)[1])
             targets.append(target_point) #IH comment
@@ -132,7 +134,8 @@ def validation(odenet, data_handler, method, explicit_time):
         loss = torch.mean((predictions - targets)**2)
         #print("gene_mult_mean =", torch.mean(torch.relu(odenet.gene_multipliers) + 0.1))
         
-    return [loss, n_val, t]
+    return [loss, n_val]
+
 
 def true_loss(odenet, data_handler, method):
     return [0,0]
@@ -303,6 +306,7 @@ if __name__ == "__main__":
                 {'params': odenet.net_prods.linear_out.bias},
                 {'params': odenet.net_alpha_combine.linear_out.weight},
                 {'params': odenet.gene_multipliers,'lr': 5*settings['init_lr']}
+               #{'params': odenet.gene_multipliers}
                 
             ],  lr=settings['init_lr'], weight_decay=settings['weight_decay'])
 
