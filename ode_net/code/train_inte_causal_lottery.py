@@ -135,8 +135,7 @@ def decrease_lr(opt, verbose, tot_epochs, epoch, lower_lr,  dec_lr_factor ):
 
 
 
-def training_step(odenet, data_handler, opt, method, batch_size, explicit_time, relative_error, batch_for_prior, prior_grad, loss_lambda):
-    #print("Using {} threads training_step".format(torch.get_num_threads()))
+def training_step(odenet, data_handler, opt, method, batch_size, batch_for_prior, prior_grad):
     batch, t, target = data_handler.get_batch(batch_size)
     
     '''
@@ -156,13 +155,12 @@ def training_step(odenet, data_handler, opt, method, batch_size, explicit_time, 
     
     pred_grad = odenet.prior_only_forward(t,batch_for_prior)
     loss_prior = torch.mean((pred_grad - prior_grad)**2)
-    #loss_prior = loss_data
-
-    composed_loss = loss_lambda * loss_data + (1- loss_lambda) * loss_prior
-    composed_loss.backward() #MOST EXPENSIVE STEP!
+    
+    loss_data.backward() #MOST EXPENSIVE STEP!
     opt.step()
     return [loss_data, loss_prior]
 
+'''
 def training_step_prior_model(odenet,  opt, batch_for_prior, prior_grad):
     opt.zero_grad()
     pred_grad = odenet.prior_only_forward(0,batch_for_prior)
@@ -170,9 +168,7 @@ def training_step_prior_model(odenet,  opt, batch_for_prior, prior_grad):
     loss_prior.backward()
     opt.step()
     return loss_prior
-
-def solve_inner_problem(prior_matrix, weight_matrix):
-    return 7
+'''
 
 
 def _build_save_file_name(save_path, epochs):
@@ -246,7 +242,8 @@ if __name__ == "__main__":
     prior_mat = read_prior_matrix(prior_mat_loc, sparse = False, num_genes = data_handler.dim)
     batch_for_prior = (torch.rand(10000,1,prior_mat.shape[0], device = data_handler.device) - 0.5)
     prior_grad = torch.matmul(batch_for_prior,prior_mat) #can be any model here that predicts the derivative
-    del prior_mat
+    PPI = torch.matmul(prior_mat, torch.transpose(prior_mat, 0, 1)) #no normalization for now, only clamp
+    PPI = torch.clamp(PPI, min = 0, max = 1)
     loss_lambda_at_start =  1
     loss_lambda_at_end = 1
     
@@ -254,6 +251,11 @@ if __name__ == "__main__":
     odenet = ODENet(device, data_handler.dim, explicit_time=settings['explicit_time'], neurons = settings['neurons_per_layer'], 
                     log_scale = settings['log_scale'], init_bias_y = settings['init_bias_y'])
     odenet.float()
+
+    my_current_custom_pruning_scores = {}
+    my_current_custom_pruning_scores['net_prods.linear_out'] = torch.ones(settings['neurons_per_layer'], data_handler.dim)
+    my_current_custom_pruning_scores['net_sums.linear_out'] = torch.ones(settings['neurons_per_layer'], data_handler.dim)
+
     
     print('Using optimizer: {}'.format(settings['optimizer']))
     if settings['optimizer'] == 'rmsprop':
@@ -352,8 +354,10 @@ if __name__ == "__main__":
     all_lrs_used = []
 
     
-    num_epochs_till_mask = 1
-    prune_perc = 0.20
+    num_epochs_till_mask = 2
+    prune_perc = 0.05
+    pruning_weight_lambda = 0.90
+    
         
 
     for epoch in range(1, tot_epochs + 1):
@@ -366,13 +370,15 @@ if __name__ == "__main__":
             total_params = 0
             for name, module in odenet.named_modules():
                 if isinstance(module, torch.nn.Linear):
-                    #my_custom_weights = torch.abs(eval("odenet_prior."+name).weight.detach())
-                    my_custom_weights = solve_inner_problem(prior_mat, module.weight.detach())
-                    my_convex_combo = 0 #implement
-                    prune.l1_unstructured(module, name='weight', amount=prune_perc, importance_scores = my_custom_weights)
-                    
-                    #prune.remove(module, name = "weight") #consider doing this and removing next line
-                    #module.weight[module.weight_mask==1] == module.weight_orig[module.weight_mask==1] #resetting?? NAH!
+                    if name == 'net_prods.linear_out' or name == 'net_sums.linear_out':
+                        current_NN_weights_rowwise_weighted = abs(module.weight.detach()) / (torch.sum(abs(module.weight.detach()), 1).unsqueeze(-1))
+                        updated_score = pruning_weight_lambda * torch.matmul(PPI,  my_current_custom_pruning_scores[name]) + (1 - pruning_weight_lambda) * current_NN_weights_rowwise_weighted
+                        prune.l1_unstructured(module, name='weight', amount=prune_perc, importance_scores =  updated_score)
+                        my_current_custom_pruning_scores[name] = updated_score
+                        
+                    else: #for now for the combine layer
+                        prune.l1_unstructured(module, name='weight', amount=prune_perc)
+
                     total_params += module.weight.nelement()
                     total_pruned += torch.sum(module.weight == 0)
             print("Updated mask based on prior! Current perc pruned: {:.2%}, num pruned: {}".format(total_pruned/total_params, total_pruned))
@@ -397,7 +403,7 @@ if __name__ == "__main__":
         while not data_handler.epoch_done:
             start_batch_time = perf_counter()
             
-            loss_list = training_step(odenet, data_handler, opt, settings['method'], settings['batch_size'], settings['explicit_time'], settings['relative_error'], batch_for_prior, prior_grad, loss_lambda)
+            loss_list = training_step(odenet, data_handler, opt, settings['method'], settings['batch_size'], batch_for_prior, prior_grad)
             loss = loss_list[0]
             prior_loss = loss_list[1]
             #batch_times.append(perf_counter() - start_batch_time)

@@ -243,6 +243,7 @@ if __name__ == "__main__":
     #Read in the prior matrix
     prior_mat_loc = '/home/ubuntu/lottery_tickets_phoenix/ground_truth_simulator/clean_data/edge_prior_matrix_chalmers_350_noise_{}.csv'.format(settings['noise'])
     prior_mat = read_prior_matrix(prior_mat_loc, sparse = False, num_genes = data_handler.dim)
+    
     batch_for_prior = (torch.rand(10000,1,prior_mat.shape[0], device = data_handler.device) - 0.5)
     prior_grad = torch.matmul(batch_for_prior,prior_mat) #can be any model here that predicts the derivative
     del prior_mat
