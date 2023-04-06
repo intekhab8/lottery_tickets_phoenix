@@ -81,6 +81,8 @@ def read_prior_matrix(prior_mat_file_loc, sparse = False, num_genes = 11165):
 
 def validation(odenet, data_handler, method, explicit_time):
     data, t, target_full, n_val = data_handler.get_validation_set()
+    if method == "trajectory":
+        False
 
     init_bias_y = data_handler.init_bias_y
     #odenet.eval()
@@ -91,12 +93,12 @@ def validation(odenet, data_handler, method, explicit_time):
         for index, (time, batch_point, target_point) in enumerate(zip(t, data, target_full)):
             #IH: 9/10/2021 - added these to handle unequal time availability 
             #comment these out when not requiring nan-value checking
+            #not_nan_idx = [i for i in range(len(time)) if not torch.isnan(time[i])]
+            #time = time[not_nan_idx]
+            #not_nan_idx.pop()
+            #batch_point = batch_point[not_nan_idx]
+            #target_point = target_point[not_nan_idx]
             
-            not_nan_idx = [i for i in range(len(time)) if not torch.isnan(time[i])]
-            time = time[not_nan_idx]
-            not_nan_idx.pop()
-            batch_point = batch_point[not_nan_idx]
-            target_point = target_point[not_nan_idx]
             # Do prediction
             predictions.append(odeint(odenet, batch_point, time, method=method)[1])
             targets.append(target_point) #IH comment
@@ -132,6 +134,24 @@ def decrease_lr(opt, verbose, tot_epochs, epoch, lower_lr,  dec_lr_factor ):
         param_group['lr'] = param_group['lr'] * dec_lr_factor
     if verbose:
         print(dir_string,"learning rate to: %f" % opt.param_groups[0]['lr'])
+
+
+def reset_lr(opt, verbose, old_lr):
+    dir_string = "Increasing"
+    group_count = 0
+    for param_group in opt.param_groups:
+        group_count += 1 #gene_mult!
+        param_group['lr'] = old_lr 
+        if group_count == 6:
+            param_group['lr'] = 5*old_lr 
+        if verbose:
+            print(dir_string,"learning rate to: %f" % param_group['lr'])
+
+def setOptimizerLRScheduler(patience):
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(opt, mode='min', 
+                                                     factor=0.9, patience=patience, threshold=1e-06, 
+                                                     threshold_mode='abs', cooldown=0, min_lr=4e-04, eps=1e-09, verbose=True)
+    return scheduler
 
 
 
@@ -242,8 +262,9 @@ if __name__ == "__main__":
     prior_mat = read_prior_matrix(prior_mat_loc, sparse = False, num_genes = data_handler.dim)
     batch_for_prior = (torch.rand(10000,1,prior_mat.shape[0], device = data_handler.device) - 0.5)
     prior_grad = torch.matmul(batch_for_prior,prior_mat) #can be any model here that predicts the derivative
-    PPI = torch.matmul(prior_mat, torch.transpose(prior_mat, 0, 1)) #no normalization for now, only clamp
-    PPI = torch.clamp(PPI, min = 0, max = 1)
+    PPI = torch.matmul(prior_mat, torch.transpose(prior_mat, 0, 1)) 
+    PPI =  abs(PPI) / torch.sum(abs(PPI)) #normalize PPI
+    #PPI = torch.clamp(PPI, min = 0, max = 1)
     loss_lambda_at_start =  1
     loss_lambda_at_end = 1
     
@@ -255,7 +276,6 @@ if __name__ == "__main__":
     my_current_custom_pruning_scores = {}
     my_current_custom_pruning_scores['net_prods.linear_out'] = torch.ones(settings['neurons_per_layer'], data_handler.dim)
     my_current_custom_pruning_scores['net_sums.linear_out'] = torch.ones(settings['neurons_per_layer'], data_handler.dim)
-
     
     print('Using optimizer: {}'.format(settings['optimizer']))
     if settings['optimizer'] == 'rmsprop':
@@ -298,13 +318,7 @@ if __name__ == "__main__":
 
     #quit()
 
-    # Select optimizer
     
-
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(opt, mode='min', 
-    factor=0.9, patience=3, threshold=1e-06, 
-    threshold_mode='abs', cooldown=0, min_lr=0, eps=1e-09, verbose=True)
-
     
     # Init plot
     if settings['viz']:
@@ -350,39 +364,49 @@ if __name__ == "__main__":
     rep_epochs_time_so_far = []
     rep_epochs_so_far = []
     consec_epochs_failed = 0
-    epochs_to_fail_to_terminate = 15
+    epochs_to_fail_to_terminate = 9999
     all_lrs_used = []
 
     
-    num_epochs_till_mask = 2
-    prune_perc = 0.05
-    pruning_weight_lambda = 0.90
-    
-        
+    masking_start_epoch = 2
+    initial_hit_perc = 0.70
+    num_epochs_till_mask = 10
+    prune_perc = 0.10
+    pruning_score_lambda = 0.50
+    lr_schedule_patience = 3
+
+    scheduler = setOptimizerLRScheduler(patience=lr_schedule_patience)
+
 
     for epoch in range(1, tot_epochs + 1):
         print()
         print("[Running epoch {}/{}]".format(epoch, settings['epochs']))
 
         #Iterative magnitude pruning (IMP for lottery tickets)
-        if (epoch > 0 and epoch < tot_epochs and epoch % num_epochs_till_mask == 0):
+        if (epoch == masking_start_epoch) or (epoch >= masking_start_epoch and epoch < tot_epochs and epoch % num_epochs_till_mask == 0):
+            if epoch == masking_start_epoch:
+                prune_this_epoch = initial_hit_perc
+            else:
+                prune_this_epoch = prune_perc
+
             total_pruned = 0
             total_params = 0
             for name, module in odenet.named_modules():
                 if isinstance(module, torch.nn.Linear):
                     if name == 'net_prods.linear_out' or name == 'net_sums.linear_out':
                         current_NN_weights_rowwise_weighted = abs(module.weight.detach()) / (torch.sum(abs(module.weight.detach()), 1).unsqueeze(-1))
-                        updated_score = pruning_weight_lambda * torch.matmul(PPI,  my_current_custom_pruning_scores[name]) + (1 - pruning_weight_lambda) * current_NN_weights_rowwise_weighted
-                        prune.l1_unstructured(module, name='weight', amount=prune_perc, importance_scores =  updated_score)
+                        updated_score = pruning_score_lambda * torch.matmul(my_current_custom_pruning_scores[name], PPI) + (1 - pruning_score_lambda) * current_NN_weights_rowwise_weighted
+                        prune.l1_unstructured(module, name='weight', amount=prune_this_epoch, importance_scores =  updated_score) #
                         my_current_custom_pruning_scores[name] = updated_score
                         
                     else: #for now for the combine layer
-                        prune.l1_unstructured(module, name='weight', amount=prune_perc)
-
+                        prune.l1_unstructured(module, name='weight', amount=prune_this_epoch)
                     total_params += module.weight.nelement()
                     total_pruned += torch.sum(module.weight == 0)
             print("Updated mask based on prior! Current perc pruned: {:.2%}, num pruned: {}".format(total_pruned/total_params, total_pruned))
-            
+            reset_lr(opt, True, settings['init_lr']) #, 
+            scheduler = setOptimizerLRScheduler(patience = lr_schedule_patience)
+
             
         start_epoch_time = perf_counter()
         iteration_counter = 1
