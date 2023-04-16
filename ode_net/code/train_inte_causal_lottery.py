@@ -155,7 +155,7 @@ def setOptimizerLRScheduler(patience):
 
 
 
-def training_step(odenet, data_handler, opt, method, batch_size, batch_for_prior, prior_grad):
+def training_step(odenet, data_handler, opt, method, batch_size, batch_for_prior, prior_grad, lambda_loss):
     batch, t, target = data_handler.get_batch(batch_size)
     
     '''
@@ -176,7 +176,8 @@ def training_step(odenet, data_handler, opt, method, batch_size, batch_for_prior
     pred_grad = odenet.prior_only_forward(t,batch_for_prior)
     loss_prior = torch.mean((pred_grad - prior_grad)**2)
     
-    loss_data.backward() #MOST EXPENSIVE STEP!
+    composed_loss = lambda_loss*loss_data + (1- lambda_loss)*loss_prior
+    composed_loss.backward() #MOST EXPENSIVE STEP!
     opt.step()
     return [loss_data, loss_prior]
 
@@ -264,9 +265,8 @@ if __name__ == "__main__":
     prior_grad = torch.matmul(batch_for_prior,prior_mat) #can be any model here that predicts the derivative
     PPI = torch.matmul(prior_mat, torch.transpose(prior_mat, 0, 1)) 
     PPI =  abs(PPI) / torch.sum(abs(PPI)) #normalize PPI
-    #PPI = torch.clamp(PPI, min = 0, max = 1)
-    loss_lambda_at_start =  1
-    loss_lambda_at_end = 1
+    loss_lambda_at_start =  0.99
+    loss_lambda_at_end = 0.99
     
     
     odenet = ODENet(device, data_handler.dim, explicit_time=settings['explicit_time'], neurons = settings['neurons_per_layer'], 
@@ -276,7 +276,8 @@ if __name__ == "__main__":
     my_current_custom_pruning_scores = {}
     my_current_custom_pruning_scores['net_prods.linear_out'] = torch.ones(settings['neurons_per_layer'], data_handler.dim)
     my_current_custom_pruning_scores['net_sums.linear_out'] = torch.ones(settings['neurons_per_layer'], data_handler.dim)
-    
+    my_current_custom_pruning_scores['net_alpha_combine.linear_out'] = torch.ones(2*data_handler.dim, settings['neurons_per_layer'])
+
     print('Using optimizer: {}'.format(settings['optimizer']))
     if settings['optimizer'] == 'rmsprop':
         opt = optim.RMSprop(odenet.parameters(), lr=settings['init_lr'], weight_decay=settings['weight_decay'])
@@ -314,6 +315,9 @@ if __name__ == "__main__":
         net_file.write('and then lambda = {}'.format(loss_lambda_at_end))
         net_file.write('\n')
         net_file.write('causal lottery!')
+        net_file.write('\n')
+        net_file.write('doing PPI mask + T mask but properly normalized.')
+        
         
 
     #quit()
@@ -393,14 +397,27 @@ if __name__ == "__main__":
             total_params = 0
             for name, module in odenet.named_modules():
                 if isinstance(module, torch.nn.Linear):
+                    current_NN_weights_rowwise_weighted = abs(module.weight.detach()) / (torch.sum(abs(module.weight.detach()), 1).unsqueeze(-1))
+                    current_NN_weights_rowwise_weighted = torch.nan_to_num(current_NN_weights_rowwise_weighted, nan = 0) #changing nas to 0
                     if name == 'net_prods.linear_out' or name == 'net_sums.linear_out':
-                        current_NN_weights_rowwise_weighted = abs(module.weight.detach()) / (torch.sum(abs(module.weight.detach()), 1).unsqueeze(-1))
                         updated_score = pruning_score_lambda * torch.matmul(my_current_custom_pruning_scores[name], PPI) + (1 - pruning_score_lambda) * current_NN_weights_rowwise_weighted
                         prune.l1_unstructured(module, name='weight', amount=prune_this_epoch, importance_scores =  updated_score) #
-                        my_current_custom_pruning_scores[name] = updated_score
+                       
+                    elif name == 'net_alpha_combine.linear_out': 
+                        sums_mask_curr = my_current_custom_pruning_scores['net_sums.linear_out']
+                        sums_mask_norm = abs(sums_mask_curr) / (torch.sum(abs(sums_mask_curr), 1).unsqueeze(-1))
+                        sums_mask_norm = torch.nan_to_num(sums_mask_norm, nan = 0)
+                        prods_mask_curr = my_current_custom_pruning_scores['net_prods.linear_out']
+                        prods_mask_norm = abs(prods_mask_curr) / (torch.sum(abs(prods_mask_curr), 1).unsqueeze(-1))
+                        prods_mask_norm = torch.nan_to_num(prods_mask_norm, nan = 0)
+                        sums_prods_concat_mask = torch.cat((sums_mask_norm,prods_mask_norm), dim = 0)
+                        updated_score = (pruning_score_lambda * torch.transpose(torch.matmul(sums_prods_concat_mask, abs(prior_mat)),0,1) + (1 - pruning_score_lambda) * current_NN_weights_rowwise_weighted).contiguous()
+                        prune.l1_unstructured(module, name='weight', amount=prune_this_epoch, importance_scores =  updated_score) #, 
                         
-                    else: #for now for the combine layer
-                        prune.l1_unstructured(module, name='weight', amount=prune_this_epoch)
+                    else:
+                        print("asked to prune {}, a module that is not part of PHOENIX! Quitting.".format(name))
+                        quit()
+                    my_current_custom_pruning_scores[name] = updated_score
                     total_params += module.weight.nelement()
                     total_pruned += torch.sum(module.weight == 0)
             print("Updated mask based on prior! Current perc pruned: {:.2%}, num pruned: {}".format(total_pruned/total_params, total_pruned))
@@ -427,7 +444,7 @@ if __name__ == "__main__":
         while not data_handler.epoch_done:
             start_batch_time = perf_counter()
             
-            loss_list = training_step(odenet, data_handler, opt, settings['method'], settings['batch_size'], batch_for_prior, prior_grad)
+            loss_list = training_step(odenet, data_handler, opt, settings['method'], settings['batch_size'], batch_for_prior, prior_grad, loss_lambda)
             loss = loss_list[0]
             prior_loss = loss_list[1]
             #batch_times.append(perf_counter() - start_batch_time)
