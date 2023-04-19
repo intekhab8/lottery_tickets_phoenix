@@ -46,4 +46,3 @@ np.savetxt("/home/ubuntu/lottery_tickets_phoenix/ode_net/code/model_inspect/wo_p
 np.savetxt("/home/ubuntu/lottery_tickets_phoenix/ode_net/code/model_inspect/bo_prods.csv", Bo_prods, delimiter=",")
 np.savetxt("/home/ubuntu/lottery_tickets_phoenix/ode_net/code/model_inspect/alpha_comb.csv", alpha_comb, delimiter=",")
 np.savetxt("/home/ubuntu/lottery_tickets_phoenix/ode_net/code/model_inspect/gene_mult.csv", gene_mult, delimiter=",")
-

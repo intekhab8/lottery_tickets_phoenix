@@ -79,7 +79,6 @@ class ODENet(nn.Module):
             self.net_alpha_combine = nn.Sequential()
             self.net_alpha_combine.add_module('linear_out',nn.Linear(2*neurons, ndim, bias = False))
           
-          
             self.gene_multipliers = nn.Parameter(torch.rand(1,ndim), requires_grad= True)
             #self.gene_multipliers = nn.Parameter(torch.zeros(ndim, requires_grad= True))
                 
@@ -99,18 +98,7 @@ class ODENet(nn.Module):
             if isinstance(n, nn.Linear):
                 nn.init.orthogonal_(n.weight, gain = calculate_gain("sigmoid"))
                 #nn.init.sparse_(n.weight,  sparsity=0.95, std = 0.05)
-                
-        #self.net_prods.apply(off_diag_init)
-        #self.net_sums.apply(off_diag_init)
-        
-      
-        #creating masks and register the hooks
-        #mask_prods = torch.tril(torch.ones_like(self.net_prods.linear_out.weight), diagonal = -1) + torch.triu(torch.ones_like(self.net_prods.linear_out.weight), diagonal = 1)
-        #mask_sums = torch.tril(torch.ones_like(self.net_sums.linear_out.weight), diagonal = -1) + torch.triu(torch.ones_like(self.net_sums.linear_out.weight), diagonal = 1)
-        
-        #self.net_prods.linear_out.weight.register_hook(get_zero_grad_hook(mask_prods))
-        #self.net_sums.linear_out.weight.register_hook(get_zero_grad_hook(mask_sums)) 
-
+         
         
         self.net_prods.to(device)
         self.gene_multipliers.to(device)
@@ -145,6 +133,7 @@ class ODENet(nn.Module):
         torch.save(self.net_prods, prod_path)
         torch.save(self.net_sums, sum_path)
         torch.save(self.net_alpha_combine, alpha_comb_path)
+        #torch.save(self.net_alpha_combine_prods, alpha_comb_prods_path)
         torch.save(self.gene_multipliers, gene_mult_path)
         
 
