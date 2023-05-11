@@ -66,7 +66,6 @@ def get_true_val_set_r2(odenet, data_handler, method, batch_type):
     
     return [var_explained_pw, true_val_mse]
 
-
 def read_prior_matrix(prior_mat_file_loc, sparse = False, num_genes = 11165):
     if sparse == False: 
         mat = np.genfromtxt(prior_mat_file_loc,delimiter=',')
@@ -273,10 +272,10 @@ if __name__ == "__main__":
     odenet.float()
 
     my_current_custom_pruning_scores = {}
-    my_current_custom_pruning_scores['net_prods.linear_out'] = torch.ones(settings['neurons_per_layer'], data_handler.dim)
-    my_current_custom_pruning_scores['net_sums.linear_out'] = torch.ones(settings['neurons_per_layer'], data_handler.dim)
-    my_current_custom_pruning_scores['net_alpha_combine_sums.linear_out'] = torch.ones(data_handler.dim, settings['neurons_per_layer'])
-    my_current_custom_pruning_scores['net_alpha_combine_prods.linear_out'] = torch.ones(data_handler.dim, settings['neurons_per_layer'])
+    my_current_custom_pruning_scores['net_prods.linear_out'] = torch.ones(1*settings['neurons_per_layer'], data_handler.dim)
+    my_current_custom_pruning_scores['net_sums.linear_out'] = torch.ones(1*settings['neurons_per_layer'], data_handler.dim)
+    my_current_custom_pruning_scores['net_alpha_combine_sums.linear_out'] = torch.ones(data_handler.dim, 1*settings['neurons_per_layer'])
+    my_current_custom_pruning_scores['net_alpha_combine_prods.linear_out'] = torch.ones(data_handler.dim, 1*settings['neurons_per_layer'])
 
     print('Using optimizer: {}'.format(settings['optimizer']))
     if settings['optimizer'] == 'rmsprop':
@@ -291,8 +290,8 @@ if __name__ == "__main__":
         opt = optim.Adam([
                 {'params': odenet.net_sums.linear_out.weight}, 
                 {'params': odenet.net_sums.linear_out.bias},
-                {'params': odenet.net_prods.linear_out.weight},
-                {'params': odenet.net_prods.linear_out.bias},
+               # {'params': odenet.net_prods.linear_out.weight},
+                #{'params': odenet.net_prods.linear_out.bias},
                 {'params': odenet.net_alpha_combine.linear_out.weight},
                 #{'params': odenet.net_alpha_combine_sums.linear_out.weight},
                 #{'params': odenet.net_alpha_combine_prods.linear_out.weight},
@@ -378,8 +377,8 @@ if __name__ == "__main__":
     initial_hit_perc = 0.70
     num_epochs_till_mask = 10
     prune_perc = 0.10
-    pruning_score_lambda = 0.50
-    lr_schedule_patience = 3
+    pruning_score_lambda = 0.75
+    lr_schedule_patience = 2
 
     scheduler = setOptimizerLRScheduler(patience=lr_schedule_patience)
 
@@ -389,8 +388,8 @@ if __name__ == "__main__":
         print("[Running epoch {}/{}]".format(epoch, settings['epochs']))
 
         #Iterative magnitude pruning (IMP for lottery tickets)
-        if (epoch == masking_start_epoch) or (epoch >= masking_start_epoch and epoch < tot_epochs and epoch % num_epochs_till_mask == 0):
-            if epoch == masking_start_epoch:
+        if (epoch == masking_start_epoch) or (epoch == masking_start_epoch +0 ) or (epoch >= masking_start_epoch and epoch < tot_epochs and epoch % num_epochs_till_mask in [0,0]):
+            if epoch == masking_start_epoch or epoch == masking_start_epoch + 0:
                 prune_this_epoch = initial_hit_perc
             else:
                 prune_this_epoch = prune_perc
@@ -400,38 +399,49 @@ if __name__ == "__main__":
             for name, module in odenet.named_modules():
                 if isinstance(module, torch.nn.Linear):
                     
-                    if name == 'net_prods.linear_out' or name == 'net_sums.linear_out':
+                    if name == 'net_sums.linear_out' and ((epoch == masking_start_epoch) or epoch % num_epochs_till_mask == 0): #name == 'net_prods.linear_out' or 
                         current_NN_weights_rowwise_weighted = abs(module.weight.detach()) / (torch.sum(abs(module.weight.detach()), 1).unsqueeze(-1))
                         current_NN_weights_rowwise_weighted = torch.nan_to_num(current_NN_weights_rowwise_weighted, nan = 0) #changing nas to 0
                         updated_score = pruning_score_lambda * torch.matmul(my_current_custom_pruning_scores[name], PPI) + (1 - pruning_score_lambda) * current_NN_weights_rowwise_weighted
                         prune.l1_unstructured(module, name='weight', amount=prune_this_epoch, importance_scores = updated_score) #
-                    
-                    elif name == 'net_alpha_combine.linear_out':
+                        
+
+                    elif name == 'net_alpha_combine.linear_out' and ((epoch == masking_start_epoch +0 ) or (epoch % num_epochs_till_mask == 0)):
+                        #current_NN_weights_rowwise_weighted = abs(module.weight.detach()) / (torch.sum(abs(module.weight.detach()), 1).unsqueeze(-1))
+                        #current_NN_weights_rowwise_weighted = torch.nan_to_num(current_NN_weights_rowwise_weighted, nan = 0)
                         current_NN_weights_abs = abs(module.weight.detach()) 
-                        current_NN_weights_abs_sums = current_NN_weights_abs[:,0:settings['neurons_per_layer']]
-                        current_NN_weights_abs_prods = current_NN_weights_abs[:,settings['neurons_per_layer']:2*settings['neurons_per_layer']]
+                        #current_NN_weights_abs_sums = current_NN_weights_abs[:,0:(2*settings['neurons_per_layer'])]
+                        #current_NN_weights_abs_prods = current_NN_weights_abs[:,settings['neurons_per_layer']:2*settings['neurons_per_layer']]
                         
                         sums_mask_curr = my_current_custom_pruning_scores['net_sums.linear_out']
-                        sums_mask_T = pruning_score_lambda * torch.transpose(torch.matmul(sums_mask_curr, abs(prior_mat)),0,1) + (1 - pruning_score_lambda) * current_NN_weights_abs_sums
-                        sums_mask_T = sums_mask_T / (torch.sum(sums_mask_T, 1)).unsqueeze(-1)
-                        sums_mask_T = torch.nan_to_num(sums_mask_T , nan = 0) #changing nas to 0
+                        T_tranpose_S_transpose = torch.transpose(torch.matmul(sums_mask_curr,abs(prior_mat)),0,1)
+                        S_S_transpose_inv = torch.inverse(torch.matmul(sums_mask_curr, torch.transpose(sums_mask_curr,0,1)))
+                        C_mask_best_guess = torch.matmul(T_tranpose_S_transpose, S_S_transpose_inv)
+                        #sums_mask_T = pruning_score_lambda * torch.transpose(torch.matmul(sums_mask_curr, abs(prior_mat)),0,1) + (1 - pruning_score_lambda) * current_NN_weights_abs
+                        sums_mask_T = pruning_score_lambda * C_mask_best_guess  + (1 - pruning_score_lambda) * current_NN_weights_abs
                         
-                        prods_mask_curr = my_current_custom_pruning_scores['net_prods.linear_out']
-                        prods_mask_T = pruning_score_lambda * torch.transpose(torch.matmul(prods_mask_curr, abs(prior_mat)),0,1) + (1 - pruning_score_lambda) * current_NN_weights_abs_prods
-                        prods_mask_T = prods_mask_T / (torch.sum(prods_mask_T, 1)).unsqueeze(-1)
-                        prods_mask_T = torch.nan_to_num(prods_mask_T , nan = 0) #changing nas to 0
+                        #sums_mask_T = sums_mask_T / (torch.sum(sums_mask_T, 1)).unsqueeze(-1)
+                        #sums_mask_T = torch.nan_to_num(sums_mask_T , nan = 0) #changing nas to 0
                         
-                        updated_score = torch.hstack((sums_mask_T, prods_mask_T))
+                        #prods_mask_curr = my_current_custom_pruning_scores['net_prods.linear_out']
+                        #prods_mask_T = pruning_score_lambda * torch.transpose(torch.matmul(prods_mask_curr, abs(prior_mat)),0,1) + (1 - pruning_score_lambda) * current_NN_weights_abs_prods
+                        #prods_mask_T = prods_mask_T / (torch.sum(prods_mask_T, 1)).unsqueeze(-1)
+                        #prods_mask_T = torch.nan_to_num(prods_mask_T , nan = 0) #changing nas to 0
+                        
+                        #updated_score = torch.hstack((sums_mask_T, prods_mask_T))
+                        updated_score = sums_mask_T.contiguous()
                         prune.l1_unstructured(module, name='weight', amount=prune_this_epoch, importance_scores = updated_score) # 
-                    
-                    else:
-                        print("asked to prune {}, a module that is not part of PHOENIX! Quitting.".format(name))
-                        quit()
-         
-                    
+                        
+                    #else:
+                    #    print("asked to prune {}, a module that is not part of PHOENIX! Quitting.".format(name))
+                    #    quit()
+
+
                     my_current_custom_pruning_scores[name] = updated_score
                     total_params += module.weight.nelement()
                     total_pruned += torch.sum(module.weight == 0)
+                    
+                    
                     
             print("Updated mask based on prior! Current perc pruned: {:.2%}, num pruned: {}".format(total_pruned/total_params, total_pruned))
             reset_lr(opt, True, settings['init_lr']) #, 
