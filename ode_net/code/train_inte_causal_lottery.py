@@ -261,8 +261,8 @@ if __name__ == "__main__":
     prior_mat = read_prior_matrix(prior_mat_loc, sparse = False, num_genes = data_handler.dim)
     batch_for_prior = (torch.rand(10000,1,prior_mat.shape[0], device = data_handler.device) - 0.5)
     prior_grad = torch.matmul(batch_for_prior,prior_mat) #can be any model here that predicts the derivative
-    PPI = torch.matmul(prior_mat, torch.transpose(prior_mat, 0, 1)) 
-    PPI =  abs(PPI) / torch.sum(abs(PPI)) #normalize PPI
+    PPI = torch.matmul(torch.abs(prior_mat), torch.transpose(torch.abs(prior_mat), 0, 1)) 
+    PPI =  PPI / torch.sum(PPI) #normalize PPI
     loss_lambda_at_start =  1
     loss_lambda_at_end = 1
     
@@ -271,7 +271,8 @@ if __name__ == "__main__":
     initial_hit_perc = 0.70
     num_epochs_till_mask = 10
     prune_perc = 0.10
-    pruning_score_lambda = 0.50
+    pruning_score_lambda_PPI = 0.50
+    pruning_score_lambda_motif = 0.75
     lr_schedule_patience = 2
     
     odenet = ODENet(device, data_handler.dim, explicit_time=settings['explicit_time'], neurons = settings['neurons_per_layer'], 
@@ -323,9 +324,9 @@ if __name__ == "__main__":
         net_file.write('\n')
         net_file.write('causal lottery!')
         net_file.write('\n')
-        net_file.write('doing PPI mask + T mask (but separately for sums and prods).')
+        net_file.write('doing PPI mask + T mask')
         net_file.write('\n')
-        net_file.write('pruning score lambda = {}'.format(pruning_score_lambda))
+        net_file.write('pruning score lambda (PPI, Motif) = ({}, {})'.format(pruning_score_lambda_PPI, pruning_score_lambda_motif))
         net_file.write('\n')
         net_file.write('Initial hit = {} at epoch {}, then prune {} every {} epochs'.format(initial_hit_perc, masking_start_epoch, prune_perc, num_epochs_till_mask))
 
@@ -405,7 +406,7 @@ if __name__ == "__main__":
                         #current_NN_weights_rowwise_weighted = torch.nan_to_num(current_NN_weights_rowwise_weighted, nan = 0) #changing nas to 0
                         mask_curr = my_current_custom_pruning_scores[name]
                         S_PPI = torch.matmul(mask_curr, PPI)
-                        updated_score = pruning_score_lambda * S_PPI + (1 - pruning_score_lambda) * current_NN_weights_abs
+                        updated_score = pruning_score_lambda_PPI * S_PPI + (1 - pruning_score_lambda_PPI) * current_NN_weights_abs
                         prune.l1_unstructured(module, name='weight', amount=prune_this_epoch, importance_scores = updated_score) #
                         
 
@@ -428,7 +429,7 @@ if __name__ == "__main__":
                         T_tranpose_S_transpose = torch.transpose(torch.matmul(combo_mask_curr,abs(prior_mat)),0,1)
                         S_S_transpose_inv = torch.inverse(torch.matmul(combo_mask_curr, torch.transpose(combo_mask_curr,0,1)))
                         C_mask_best_guess = torch.matmul(T_tranpose_S_transpose, S_S_transpose_inv)
-                        mask_T = pruning_score_lambda * torch.abs(C_mask_best_guess)  + (1 - pruning_score_lambda) * current_NN_weights_abs
+                        mask_T = pruning_score_lambda_motif * torch.abs(C_mask_best_guess)  + (1 - pruning_score_lambda_motif) * current_NN_weights_abs
                         
                         updated_score = mask_T.contiguous()
                         prune.l1_unstructured(module, name='weight', amount=prune_this_epoch, importance_scores = updated_score) # 
