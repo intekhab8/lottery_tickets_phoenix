@@ -261,20 +261,23 @@ if __name__ == "__main__":
     prior_mat = read_prior_matrix(prior_mat_loc, sparse = False, num_genes = data_handler.dim)
     batch_for_prior = (torch.rand(10000,1,prior_mat.shape[0], device = data_handler.device) - 0.5)
     prior_grad = torch.matmul(batch_for_prior,prior_mat) #can be any model here that predicts the derivative
-    PPI = torch.matmul(torch.abs(prior_mat), torch.transpose(torch.abs(prior_mat), 0, 1)) 
+    pathway_loc =  '/home/ubuntu/lottery_tickets_phoenix/ground_truth_simulator/clean_data/pathway_prior.csv'
+    pathway_matrix = read_prior_matrix(pathway_loc, sparse = False, num_genes = data_handler.dim)
+    #PPI = torch.matmul(torch.abs(prior_mat), torch.transpose(torch.abs(prior_mat), 0, 1)) 
+    PPI = torch.matmul(torch.abs(pathway_matrix), torch.transpose(torch.abs(pathway_matrix), 0, 1))
     PPI =  PPI / torch.sum(PPI) #normalize PPI
     loss_lambda_at_start =  1
     loss_lambda_at_end = 1
     
 
-    masking_start_epoch = 2
+    masking_start_epoch = 3
     initial_hit_perc = 0.70
     num_epochs_till_mask = 10
     prune_perc = 0.10
     pruning_score_lambda_PPI = 0.50
-    pruning_score_lambda_motif = 0.75
+    pruning_score_lambda_motif = 0.50
     lr_schedule_patience = 2
-    
+
     odenet = ODENet(device, data_handler.dim, explicit_time=settings['explicit_time'], neurons = settings['neurons_per_layer'], 
                     log_scale = settings['log_scale'], init_bias_y = settings['init_bias_y'])
     odenet.float()
@@ -387,6 +390,10 @@ if __name__ == "__main__":
         print()
         print("[Running epoch {}/{}]".format(epoch, settings['epochs']))
 
+        if epoch > 220: 
+            num_epochs_till_mask = 20
+            prune_perc = 0.05
+
         #Iterative magnitude pruning (IMP for lottery tickets)
         if (epoch == masking_start_epoch) or (epoch == masking_start_epoch +0 ) or (epoch >= masking_start_epoch and epoch < tot_epochs and epoch % num_epochs_till_mask in [0,0]):
             if epoch == masking_start_epoch or epoch == masking_start_epoch + 0:
@@ -457,7 +464,7 @@ if __name__ == "__main__":
         this_epoch_total_train_loss = 0
         this_epoch_total_prior_loss = 0
         
-        if epoch <= 10:
+        if epoch <= 3:
             loss_lambda = loss_lambda_at_start
         else:
             loss_lambda = loss_lambda_at_end    

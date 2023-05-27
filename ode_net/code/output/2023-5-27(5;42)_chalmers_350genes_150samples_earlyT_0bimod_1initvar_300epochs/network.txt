@@ -1,0 +1,34 @@
+ODENet(
+  (net_prods): Sequential(
+    (activation_0): LogShiftedSoftSignMod()
+    (linear_out): Linear(in_features=350, out_features=70, bias=True)
+  )
+  (net_sums): Sequential(
+    (activation_0): SoftsignMod()
+    (linear_out): Linear(in_features=350, out_features=70, bias=True)
+  )
+  (net_alpha_combine): Sequential(
+    (linear_out): Linear(in_features=140, out_features=350, bias=False)
+  )
+)
+
+
+    def forward(self, t, y):
+        sums = self.net_sums(y)
+        prods = torch.exp(self.net_prods(y))
+        sums_prods_concat = torch.cat((sums, prods), dim= - 1)
+        joint = self.net_alpha_combine(sums_prods_concat)
+        #final = joint-torch.relu(self.gene_multipliers)*y
+        final = torch.relu(self.gene_multipliers)*(joint-y)
+        return(final) 
+
+lambda at start (first 5 epochs) = 1
+and then lambda = 1
+causal lottery!
+doing PPI mask + T mask
+pruning score lambda (PPI, Motif) = (0.5, 0.5)
+Initial hit = 0.7 at epoch 3, then prune 0.1 every 10 epochs
+
+PATHWAY based
+PPI = torch.matmul(torch.abs(pathway_matrix), torch.transpose(torch.abs(pathway_matrix), 0, 1))
+PPI =  PPI / torch.sum(PPI)
