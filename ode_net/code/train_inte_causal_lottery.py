@@ -263,8 +263,8 @@ if __name__ == "__main__":
     prior_grad = torch.matmul(batch_for_prior,prior_mat) #can be any model here that predicts the derivative
     pathway_loc =  '/home/ubuntu/lottery_tickets_phoenix/ground_truth_simulator/clean_data/pathway_prior.csv'
     pathway_matrix = read_prior_matrix(pathway_loc, sparse = False, num_genes = data_handler.dim)
-    #PPI = torch.matmul(torch.abs(prior_mat), torch.transpose(torch.abs(prior_mat), 0, 1)) 
-    PPI = torch.matmul(torch.abs(pathway_matrix), torch.transpose(torch.abs(pathway_matrix), 0, 1))
+    PPI = torch.matmul(torch.abs(prior_mat), torch.transpose(torch.abs(prior_mat), 0, 1)) 
+    #PPI = torch.matmul(torch.abs(pathway_matrix), torch.transpose(torch.abs(pathway_matrix), 0, 1))
     PPI =  PPI / torch.sum(PPI) #normalize PPI
     loss_lambda_at_start =  1
     loss_lambda_at_end = 1
@@ -275,7 +275,7 @@ if __name__ == "__main__":
     num_epochs_till_mask = 10
     prune_perc = 0.10
     pruning_score_lambda_PPI = 0.50
-    pruning_score_lambda_motif = 0.50
+    pruning_score_lambda_motif = 0#0.50
     lr_schedule_patience = 2
 
     odenet = ODENet(device, data_handler.dim, explicit_time=settings['explicit_time'], neurons = settings['neurons_per_layer'], 
@@ -367,7 +367,7 @@ if __name__ == "__main__":
     
     tot_epochs = settings['epochs']
     #viz_epochs = [round(tot_epochs*1/5), round(tot_epochs*2/5), round(tot_epochs*3/5), round(tot_epochs*4/5),tot_epochs]
-    rep_epochs = [1, 5, 7, 10, 15, 25, 30, 40, 50, 60, 70, 80, 100, 120, 150, 180, 200,220, 240, 300, 350, tot_epochs]
+    rep_epochs = [1, 5, 7, 10, 15, 25, 30, 40, 50, 60, 70, 80, 100, 120, 150, 180, 200,220, 240, 260, 280, 300, 350, tot_epochs]
     viz_epochs = rep_epochs
     zeroth_drop_done = False
     first_drop_done = False 
