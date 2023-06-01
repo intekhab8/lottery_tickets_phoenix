@@ -275,7 +275,7 @@ if __name__ == "__main__":
     num_epochs_till_mask = 10
     prune_perc = 0.10
     pruning_score_lambda_PPI = 0.50
-    pruning_score_lambda_motif = 0#0.50
+    pruning_score_lambda_motif = 0.50
     lr_schedule_patience = 2
 
     odenet = ODENet(device, data_handler.dim, explicit_time=settings['explicit_time'], neurons = settings['neurons_per_layer'], 
@@ -403,12 +403,18 @@ if __name__ == "__main__":
 
             total_pruned = 0
             total_params = 0
+
             for name, module in odenet.named_modules():
                 if isinstance(module, torch.nn.Linear):
-                    
+                    current_NN_weights = module.weight.detach()
+                    if name in ['net_sums.linear_out','net_alpha_combine.linear_out']:
+                        current_NN_weights_abs = abs(module.weight.detach())
+                    elif name == 'net_prods.linear_out':
+                        current_NN_weights_abs = torch.exp(module.weight.detach())
+                        current_NN_weights_abs = current_NN_weights_abs/torch.sum(current_NN_weights_abs) #trying this out for prods
+                        
                     if name in ['net_sums.linear_out','net_prods.linear_out'] and ((epoch == masking_start_epoch) or epoch % num_epochs_till_mask == 0): #name == 'net_prods.linear_out' or 
                         
-                        current_NN_weights_abs = abs(module.weight.detach()) 
                         #current_NN_weights_rowwise_weighted = abs(module.weight.detach()) / (torch.sum(abs(module.weight.detach()), 1).unsqueeze(-1))
                         #current_NN_weights_rowwise_weighted = torch.nan_to_num(current_NN_weights_rowwise_weighted, nan = 0) #changing nas to 0
                         mask_curr = my_current_custom_pruning_scores[name]
@@ -420,18 +426,10 @@ if __name__ == "__main__":
                     elif name in['net_alpha_combine.linear_out'] and ((epoch == masking_start_epoch +0 ) or (epoch % num_epochs_till_mask == 0)):
                         #current_NN_weights_rowwise_weighted = abs(module.weight.detach()) / (torch.sum(abs(module.weight.detach()), 1).unsqueeze(-1))
                         #current_NN_weights_rowwise_weighted = torch.nan_to_num(current_NN_weights_rowwise_weighted, nan = 0)
-                        current_NN_weights_abs = abs(module.weight.detach()) 
-
-
+                        
                         sums_mask_curr = my_current_custom_pruning_scores['net_sums.linear_out']
                         prods_mask_curr = my_current_custom_pruning_scores['net_prods.linear_out']
 
-                        #if name == 'net_alpha_combine_sums.linear_out':
-                        #    combo_type_name = 'net_sums.linear_out'
-                        #elif name == 'net_alpha_combine_prods.linear_out':
-                        #    combo_type_name = 'net_prods.linear_out'
-                        
-                        #combo_mask_curr = my_current_custom_pruning_scores[combo_type_name]
                         combo_mask_curr = torch.vstack((sums_mask_curr, prods_mask_curr))
                         T_tranpose_S_transpose = torch.transpose(torch.matmul(combo_mask_curr,abs(prior_mat)),0,1)
                         S_S_transpose_inv = torch.inverse(torch.matmul(combo_mask_curr, torch.transpose(combo_mask_curr,0,1)))
