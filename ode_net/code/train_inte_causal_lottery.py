@@ -275,7 +275,7 @@ if __name__ == "__main__":
     num_epochs_till_mask = 10
     prune_perc = 0.10
     pruning_score_lambda_PPI = 0.50
-    pruning_score_lambda_motif = 0.50
+    pruning_score_lambda_motif = 0#0.50
     lr_schedule_patience = 2
 
     odenet = ODENet(device, data_handler.dim, explicit_time=settings['explicit_time'], neurons = settings['neurons_per_layer'], 
@@ -411,7 +411,7 @@ if __name__ == "__main__":
                         current_NN_weights_abs = abs(module.weight.detach())
                     elif name == 'net_prods.linear_out':
                         current_NN_weights_abs = torch.exp(module.weight.detach())
-                        current_NN_weights_abs = current_NN_weights_abs/torch.sum(current_NN_weights_abs) #trying this out for prods
+                        #current_NN_weights_abs = current_NN_weights_abs/torch.sum(current_NN_weights_abs) #trying this out for prods
                         
                     if name in ['net_sums.linear_out','net_prods.linear_out'] and ((epoch == masking_start_epoch) or epoch % num_epochs_till_mask == 0): #name == 'net_prods.linear_out' or 
                         
