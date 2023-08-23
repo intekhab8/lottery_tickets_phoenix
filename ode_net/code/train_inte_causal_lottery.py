@@ -271,11 +271,11 @@ if __name__ == "__main__":
     
 
     masking_start_epoch = 3
-    initial_hit_perc = 0.70
+    initial_hit_perc = 0.80
     num_epochs_till_mask = 10
     prune_perc = 0.10
     pruning_score_lambda_PPI = 0.50
-    pruning_score_lambda_motif = 0#0.50
+    pruning_score_lambda_motif = 0.50
     lr_schedule_patience = 2
 
     odenet = ODENet(device, data_handler.dim, explicit_time=settings['explicit_time'], neurons = settings['neurons_per_layer'], 
