@@ -77,6 +77,29 @@ def read_prior_matrix(prior_mat_file_loc, sparse = False, num_genes = 11165):
         mat_torch = sparse_mat.to_dense().float()
         return(mat_torch)
 
+def normalize_values(my_tensor):
+  """Normalizes the values of a PyTorch tensor.
+
+  Args:
+    tensor: The input tensor.
+
+  Returns:
+    A normalized tensor.
+  """
+
+  
+  # Find the minimum and maximum absolute values in the tensor.
+  min_val = torch.min(my_tensor)
+  max_val = torch.max(my_tensor)
+
+  # Normalize the absolute values to the range [0, 1].
+  normalized_tensor = (my_tensor - min_val) / (max_val - min_val)
+
+  return normalized_tensor
+
+
+
+
 def validation(odenet, data_handler, method, explicit_time):
     data, t, target_full, n_val = data_handler.get_validation_set()
     if method == "trajectory":
@@ -179,15 +202,7 @@ def training_step(odenet, data_handler, opt, method, batch_size, batch_for_prior
     opt.step()
     return [loss_data, loss_prior]
 
-'''
-def training_step_prior_model(odenet,  opt, batch_for_prior, prior_grad):
-    opt.zero_grad()
-    pred_grad = odenet.prior_only_forward(0,batch_for_prior)
-    loss_prior = torch.mean((pred_grad - prior_grad)**2)
-    loss_prior.backward()
-    opt.step()
-    return loss_prior
-'''
+
 
 
 def _build_save_file_name(save_path, epochs):
@@ -271,7 +286,7 @@ if __name__ == "__main__":
     
 
     masking_start_epoch = 3
-    initial_hit_perc = 0.80
+    initial_hit_perc = 0.70
     num_epochs_till_mask = 10
     prune_perc = 0.10
     pruning_score_lambda_PPI = 0.50
@@ -406,29 +421,41 @@ if __name__ == "__main__":
 
             for name, module in odenet.named_modules():
                 if isinstance(module, torch.nn.Linear):
-                    current_NN_weights = module.weight.detach()
-                    if name in ['net_sums.linear_out','net_alpha_combine.linear_out']:
+                    #current_NN_weights = module.weight.detach()
+                    if name in ['net_sums.linear_out', ]: 
                         current_NN_weights_abs = abs(module.weight.detach())
+                        #current_NN_weights_abs = normalize_values(current_NN_weights_abs)
+                        current_NN_weights_abs = current_NN_weights_abs/torch.sum(current_NN_weights_abs) #trying normalization this for PPI layers
+                        
                     elif name == 'net_prods.linear_out':
                         current_NN_weights_abs = torch.exp(module.weight.detach())
-                        #current_NN_weights_abs = current_NN_weights_abs/torch.sum(current_NN_weights_abs) #trying this out for prods
+                        #current_NN_weights_abs = normalize_values(current_NN_weights_abs)
+                        current_NN_weights_abs = current_NN_weights_abs/torch.sum(current_NN_weights_abs) #trying normalization this for PPI layers
+                        
+                    elif name == 'net_alpha_combine.linear_out':
+                        current_NN_weights_abs = abs(module.weight.detach())
+                        sums_subtensor = current_NN_weights_abs[:, :settings['neurons_per_layer']]
+                        prods_subtensor = current_NN_weights_abs[:, settings['neurons_per_layer']:]
+                        sums_subtensor = sums_subtensor/torch.sum(sums_subtensor) #normalize_values(sums_subtensor)
+                        prods_subtensor = prods_subtensor/torch.sum(prods_subtensor) #normalize_values(prods_subtensor)
+                        current_NN_weights_abs = torch.cat((sums_subtensor, prods_subtensor), dim=1)
+                    
                         
                     if name in ['net_sums.linear_out','net_prods.linear_out'] and ((epoch == masking_start_epoch) or epoch % num_epochs_till_mask == 0): #name == 'net_prods.linear_out' or 
                         
-                        #current_NN_weights_rowwise_weighted = abs(module.weight.detach()) / (torch.sum(abs(module.weight.detach()), 1).unsqueeze(-1))
-                        #current_NN_weights_rowwise_weighted = torch.nan_to_num(current_NN_weights_rowwise_weighted, nan = 0) #changing nas to 0
                         mask_curr = my_current_custom_pruning_scores[name]
                         S_PPI = torch.matmul(mask_curr, PPI)
-                        updated_score = pruning_score_lambda_PPI * S_PPI + (1 - pruning_score_lambda_PPI) * current_NN_weights_abs
-                        prune.l1_unstructured(module, name='weight', amount=prune_this_epoch, importance_scores = updated_score) #
                         
+                        updated_score = pruning_score_lambda_PPI * S_PPI + (1 - pruning_score_lambda_PPI) * current_NN_weights_abs
+                        #updated_score = normalize_values(updated_score)
+                        
+                        prune.l1_unstructured(module, name='weight', amount=prune_this_epoch, importance_scores = updated_score) #
+                        my_current_custom_pruning_scores[name] = updated_score
 
                     elif name in['net_alpha_combine.linear_out'] and ((epoch == masking_start_epoch +0 ) or (epoch % num_epochs_till_mask == 0)):
-                        #current_NN_weights_rowwise_weighted = abs(module.weight.detach()) / (torch.sum(abs(module.weight.detach()), 1).unsqueeze(-1))
-                        #current_NN_weights_rowwise_weighted = torch.nan_to_num(current_NN_weights_rowwise_weighted, nan = 0)
-                        
-                        sums_mask_curr = my_current_custom_pruning_scores['net_sums.linear_out']
-                        prods_mask_curr = my_current_custom_pruning_scores['net_prods.linear_out']
+                         
+                        sums_mask_curr = normalize_values(my_current_custom_pruning_scores['net_sums.linear_out'])
+                        prods_mask_curr = normalize_values(my_current_custom_pruning_scores['net_prods.linear_out'])
 
                         combo_mask_curr = torch.vstack((sums_mask_curr, prods_mask_curr))
                         T_tranpose_S_transpose = torch.transpose(torch.matmul(combo_mask_curr,abs(prior_mat)),0,1)
@@ -437,14 +464,17 @@ if __name__ == "__main__":
                         mask_T = pruning_score_lambda_motif * torch.abs(C_mask_best_guess)  + (1 - pruning_score_lambda_motif) * current_NN_weights_abs
                         
                         updated_score = mask_T.contiguous()
+                        #updated_score = normalize_values(updated_score)
+
                         prune.l1_unstructured(module, name='weight', amount=prune_this_epoch, importance_scores = updated_score) # 
+                        my_current_custom_pruning_scores[name] = updated_score
                         
                     #else:
                     #    print("asked to prune {}, a module that is not part of PHOENIX! Quitting.".format(name))
                     #    quit()
 
 
-                    my_current_custom_pruning_scores[name] = updated_score
+                    
                     total_params += module.weight.nelement()
                     total_pruned += torch.sum(module.weight == 0)
                     
