@@ -281,6 +281,10 @@ if __name__ == "__main__":
     PPI = torch.matmul(torch.abs(prior_mat), torch.transpose(torch.abs(prior_mat), 0, 1)) 
     #PPI = torch.matmul(torch.abs(pathway_matrix), torch.transpose(torch.abs(pathway_matrix), 0, 1))
     PPI =  PPI / torch.sum(PPI) #normalize PPI
+    
+    noisy_PPI = PPI
+    noisy_prior_mat = prior_mat
+    
     loss_lambda_at_start =  1
     loss_lambda_at_end = 1
     
@@ -290,7 +294,7 @@ if __name__ == "__main__":
     num_epochs_till_mask = 10
     prune_perc = 0.10
     pruning_score_lambda_PPI = 0.50
-    pruning_score_lambda_motif = 0.50
+    pruning_score_lambda_motif = 0.25
     lr_schedule_patience = 2
 
     odenet = ODENet(device, data_handler.dim, explicit_time=settings['explicit_time'], neurons = settings['neurons_per_layer'], 
@@ -425,11 +429,14 @@ if __name__ == "__main__":
                     if name in ['net_sums.linear_out', ]: 
                         current_NN_weights_abs = abs(module.weight.detach())
                         #current_NN_weights_abs = normalize_values(current_NN_weights_abs)
-                        current_NN_weights_abs = current_NN_weights_abs/torch.sum(current_NN_weights_abs) #trying normalization this for PPI layers
+                        print("sum of current_NN_weights_abs of",name, torch.sum(current_NN_weights_abs) )
+                        current_NN_weights_abs = current_NN_weights_abs/torch.sum(current_NN_weights_abs) #trying normalization this for PPI layers+
                         
+
                     elif name == 'net_prods.linear_out':
                         current_NN_weights_abs = torch.exp(module.weight.detach())
                         #current_NN_weights_abs = normalize_values(current_NN_weights_abs)
+                        print("sum of current_NN_weights_abs of",name, torch.sum(current_NN_weights_abs) )
                         current_NN_weights_abs = current_NN_weights_abs/torch.sum(current_NN_weights_abs) #trying normalization this for PPI layers
                         
                     elif name == 'net_alpha_combine.linear_out':
@@ -439,12 +446,14 @@ if __name__ == "__main__":
                         sums_subtensor = sums_subtensor/torch.sum(sums_subtensor) #normalize_values(sums_subtensor)
                         prods_subtensor = prods_subtensor/torch.sum(prods_subtensor) #normalize_values(prods_subtensor)
                         current_NN_weights_abs = torch.cat((sums_subtensor, prods_subtensor), dim=1)
-                    
+                        print("sum of current_NN_weights_abs of",name, torch.sum(current_NN_weights_abs) )
+                        current_NN_weights_abs = current_NN_weights_abs/torch.sum(current_NN_weights_abs) 
                         
+
                     if name in ['net_sums.linear_out','net_prods.linear_out'] and ((epoch == masking_start_epoch) or epoch % num_epochs_till_mask == 0): #name == 'net_prods.linear_out' or 
                         
                         mask_curr = my_current_custom_pruning_scores[name]
-                        S_PPI = torch.matmul(mask_curr, PPI)
+                        S_PPI = torch.matmul(mask_curr, noisy_PPI)
                         
                         updated_score = pruning_score_lambda_PPI * S_PPI + (1 - pruning_score_lambda_PPI) * current_NN_weights_abs
                         #updated_score = normalize_values(updated_score)
@@ -458,7 +467,7 @@ if __name__ == "__main__":
                         prods_mask_curr = normalize_values(my_current_custom_pruning_scores['net_prods.linear_out'])
 
                         combo_mask_curr = torch.vstack((sums_mask_curr, prods_mask_curr))
-                        T_tranpose_S_transpose = torch.transpose(torch.matmul(combo_mask_curr,abs(prior_mat)),0,1)
+                        T_tranpose_S_transpose = torch.transpose(torch.matmul(combo_mask_curr,abs(noisy_prior_mat)),0,1)
                         S_S_transpose_inv = torch.inverse(torch.matmul(combo_mask_curr, torch.transpose(combo_mask_curr,0,1)))
                         C_mask_best_guess = torch.matmul(T_tranpose_S_transpose, S_S_transpose_inv)
                         mask_T = pruning_score_lambda_motif * torch.abs(C_mask_best_guess)  + (1 - pruning_score_lambda_motif) * current_NN_weights_abs
