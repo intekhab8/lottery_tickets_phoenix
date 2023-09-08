@@ -27,11 +27,11 @@ import matplotlib.pyplot as plt
 
 #torch.set_num_threads(4) #CHANGE THIS!
     
-sums_model = torch.load('/home/ubuntu/lottery_tickets_phoenix/ode_net/code/output/_pretrained_best_model/trained_model_epoch_200_sums.pt')
-prods_model = torch.load('/home/ubuntu/lottery_tickets_phoenix/ode_net/code/output/_pretrained_best_model/trained_model_epoch_200_prods.pt')
-alpha_comb_sums = torch.load('/home/ubuntu/lottery_tickets_phoenix/ode_net/code/output/_pretrained_best_model/trained_model_epoch_200_alpha_comb_sums.pt')
-alpha_comb_prods = torch.load('/home/ubuntu/lottery_tickets_phoenix/ode_net/code/output/_pretrained_best_model/trained_model_epoch_200_alpha_comb_prods.pt')
-gene_mult = torch.load('/home/ubuntu/lottery_tickets_phoenix/ode_net/code/output/_pretrained_best_model/trained_model_epoch_200_gene_multipliers.pt')
+sums_model = torch.load('/home/ubuntu/lottery_tickets_phoenix/ode_net/code/output/_pretrained_best_model/best_val_model_sums.pt')
+prods_model = torch.load('/home/ubuntu/lottery_tickets_phoenix/ode_net/code/output/_pretrained_best_model/best_val_model_prods.pt')
+alpha_comb_sums = torch.load('/home/ubuntu/lottery_tickets_phoenix/ode_net/code/output/_pretrained_best_model/best_val_model_alpha_comb_sums.pt')
+alpha_comb_prods = torch.load('/home/ubuntu/lottery_tickets_phoenix/ode_net/code/output/_pretrained_best_model/best_val_model_alpha_comb_prods.pt')
+gene_mult = torch.load('/home/ubuntu/lottery_tickets_phoenix/ode_net/code/output/_pretrained_best_model/best_val_model_gene_multipliers.pt')
 
 Wo_sums = np.transpose(sums_model.linear_out.weight.detach().numpy())
 #Bo_sums = np.transpose(sums_model.linear_out.bias.detach().numpy())
