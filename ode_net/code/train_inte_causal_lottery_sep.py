@@ -285,16 +285,16 @@ if __name__ == "__main__":
     noisy_PPI = PPI
     noisy_prior_mat = prior_mat
     
-    loss_lambda_at_start =  1#0.99
-    loss_lambda_at_end = 1#0.99
+    loss_lambda_at_start =  0.99
+    loss_lambda_at_end = 0.99
     
 
     masking_start_epoch = 3
     initial_hit_perc = 0.70
     num_epochs_till_mask = 10
     prune_perc = 0.10
-    pruning_score_lambda_PPI = 0
-    pruning_score_lambda_motif = 0
+    pruning_score_lambda_PPI = 0.05
+    pruning_score_lambda_motif = 0.05
     lr_schedule_patience = 2
 
     odenet = ODENet(device, data_handler.dim, explicit_time=settings['explicit_time'], neurons = settings['neurons_per_layer'], 
@@ -470,8 +470,10 @@ if __name__ == "__main__":
                     
                     
             print("Updated mask based on prior! Current perc pruned: {:.2%}, num pruned: {}".format(total_pruned/total_params, total_pruned))
-            reset_lr(opt, True, settings['init_lr']) #, 
-            scheduler = setOptimizerLRScheduler(patience = lr_schedule_patience)
+            
+            if prune_perc > 0 or initial_hit_perc > 0:
+                reset_lr(opt, True, settings['init_lr']) #, 
+                scheduler = setOptimizerLRScheduler(patience = lr_schedule_patience)
 
             
         start_epoch_time = perf_counter()
