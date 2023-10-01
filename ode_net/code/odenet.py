@@ -71,11 +71,11 @@ class ODENet(nn.Module):
            
             self.net_prods = nn.Sequential()
             self.net_prods.add_module('activation_0',  LogShiftedSoftSignMod()) #
-            self.net_prods.add_module('linear_out', nn.Linear(ndim, neurons, bias = True))
+            self.net_prods.add_module('linear_out', nn.Linear(ndim, neurons, bias = True)) #bias = True
             
             self.net_sums = nn.Sequential()
             self.net_sums.add_module('activation_0', SoftsignMod())
-            self.net_sums.add_module('linear_out', nn.Linear(ndim, neurons, bias = True))
+            self.net_sums.add_module('linear_out', nn.Linear(ndim, neurons, bias = True)) #bias = True
 
             self.net_alpha_combine_sums = nn.Sequential()
             self.net_alpha_combine_sums.add_module('linear_out',nn.Linear(neurons, ndim, bias = False))

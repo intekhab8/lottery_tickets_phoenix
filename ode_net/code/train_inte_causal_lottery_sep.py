@@ -66,11 +66,29 @@ def get_true_val_set_r2(odenet, data_handler, method, batch_type):
     
     return [var_explained_pw, true_val_mse]
 
-def read_prior_matrix(prior_mat_file_loc, sparse = False, num_genes = 11165):
+def random_multiply(mat_torch):
+  rand_torch = torch.rand(mat_torch.size())
+  out_torch = torch.zeros(mat_torch.size())
+
+  for i in range(mat_torch.size(0)):
+    for j in range(mat_torch.size(1)):
+      if rand_torch[i, j] > 0.25:
+        out_torch[i, j] = mat_torch[i, j] * -1 #flip
+      else:
+        out_torch[i, j] = mat_torch[i, j] * 1 #keep
+
+  return out_torch
+
+
+def read_prior_matrix(prior_mat_file_loc, sparse = False, num_genes = 11165, randomize = False):
     if sparse == False: 
         mat = np.genfromtxt(prior_mat_file_loc,delimiter=',')
         mat_torch = torch.from_numpy(mat)
-        return mat_torch.float()
+        mat_torch = mat_torch.float()
+        if randomize:
+            print("I AM RANDOMLY FLIPPING EDGE SIGNS!")
+            mat_torch = random_multiply(mat_torch)
+        return mat_torch
     else: #when scaling up >10000
         mat = np.genfromtxt(prior_mat_file_loc,delimiter=',')
         sparse_mat = torch.sparse_coo_tensor([mat[:,0].astype(int)-1, mat[:,1].astype(int)-1], mat[:,2], ( num_genes,  num_genes))
@@ -273,7 +291,8 @@ if __name__ == "__main__":
     
     #Read in the prior matrix
     prior_mat_loc = '/home/ubuntu/lottery_tickets_phoenix/ground_truth_simulator/clean_data/edge_prior_matrix_chalmers_350_noise_{}.csv'.format(settings['noise'])
-    prior_mat = read_prior_matrix(prior_mat_loc, sparse = False, num_genes = data_handler.dim)
+    prior_mat = read_prior_matrix(prior_mat_loc, sparse = False, num_genes = data_handler.dim, randomize= False)
+
     batch_for_prior = (torch.rand(10000,1,prior_mat.shape[0], device = data_handler.device) - 0.5)
     prior_grad = torch.matmul(batch_for_prior,prior_mat) #can be any model here that predicts the derivative
     pathway_loc =  '/home/ubuntu/lottery_tickets_phoenix/ground_truth_simulator/clean_data/pathway_prior.csv'
@@ -290,9 +309,9 @@ if __name__ == "__main__":
     
 
     masking_start_epoch = 3
-    initial_hit_perc = 0.70
+    initial_hit_perc = 0#0.70
     num_epochs_till_mask = 10
-    prune_perc = 0.10
+    prune_perc = 0#0.10
     pruning_score_lambda_PPI = 0.05
     pruning_score_lambda_motif = 0.05
     lr_schedule_patience = 2
