@@ -472,17 +472,20 @@ if __name__ == "__main__":
                         
                     elif name in['net_alpha_combine_sums.linear_out', 'net_alpha_combine_prods.linear_out'] and ((epoch == masking_start_epoch +0 ) or (epoch % num_epochs_till_mask == 0)):
 
-                        '''
                         if name == 'net_alpha_combine_sums.linear_out':
-                            mask_curr = my_current_custom_pruning_scores['net_sums.linear_out']
+                            incoming_mask_curr = my_current_custom_pruning_scores['net_sums.linear_out']
                         else:
-                            mask_curr = my_current_custom_pruning_scores['net_prods.linear_out']
-                        '''
-                        mask_curr = my_current_custom_pruning_scores[name]
+                            incoming_mask_curr = my_current_custom_pruning_scores['net_prods.linear_out']
                         
-                        GG_C = torch.matmul(GG, mask_curr)
-                        C_transpose_C_inv = torch.inverse(torch.matmul(torch.transpose(mask_curr,0,1) , mask_curr))
-                        C_mask_best_guess = torch.matmul(GG_C, C_transpose_C_inv)
+                        T_tranpose_S_transpose = torch.transpose(torch.matmul(incoming_mask_curr,abs(noisy_prior_mat)),0,1)
+                        S_S_transpose_inv = torch.inverse(torch.matmul(incoming_mask_curr, torch.transpose(incoming_mask_curr,0,1)))
+                        C_mask_best_guess = torch.matmul(T_tranpose_S_transpose, S_S_transpose_inv)
+
+                        #GG_C = torch.matmul(GG, mask_curr)
+                        #C_transpose_C_inv = torch.inverse(torch.matmul(torch.transpose(mask_curr,0,1) , mask_curr))
+                        #S_S_transpose_inv = torch.inverse(torch.matmul(incoming_mask_curr, torch.transpose(incoming_mask_curr,0,1)))
+                        #C_mask_best_guess = torch.matmul(torch.matmul(GG_C, C_transpose_C_inv),S_S_transpose_inv)
+                        
                         updated_score = pruning_score_lambda_motif * torch.abs(C_mask_best_guess)  + (1 - pruning_score_lambda_motif) * current_NN_weights_abs
                         
                         #updated_score = mask_T.contiguous()
