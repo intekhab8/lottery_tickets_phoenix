@@ -298,22 +298,25 @@ if __name__ == "__main__":
     pathway_loc =  '/home/ubuntu/lottery_tickets_phoenix/ground_truth_simulator/clean_data/pathway_prior.csv'
     pathway_matrix = read_prior_matrix(pathway_loc, sparse = False, num_genes = data_handler.dim)
     PPI = torch.matmul(torch.abs(prior_mat), torch.transpose(torch.abs(prior_mat), 0, 1)) 
-    #PPI = torch.matmul(torch.abs(pathway_matrix), torch.transpose(torch.abs(pathway_matrix), 0, 1))
     PPI =  PPI / torch.sum(PPI) #normalize PPI
+    GG = torch.matmul(torch.transpose(torch.abs(prior_mat), 0, 1) , torch.abs(prior_mat)) 
+    GG =  GG / torch.sum(GG) #normalize GG
     
+
+
     noisy_PPI = PPI
     noisy_prior_mat = prior_mat
     
-    loss_lambda_at_start =  0.99
-    loss_lambda_at_end = 0.99
+    loss_lambda_at_start =  1#0.99
+    loss_lambda_at_end = 1#0.99
     
 
     masking_start_epoch = 3
-    initial_hit_perc = 0#0.70
+    initial_hit_perc = 0.70
     num_epochs_till_mask = 10
-    prune_perc = 0#0.10
-    pruning_score_lambda_PPI = 0.05
-    pruning_score_lambda_motif = 0.05
+    prune_perc = 0.10
+    pruning_score_lambda_PPI = 0.50
+    pruning_score_lambda_motif = 0.50
     lr_schedule_patience = 2
 
     odenet = ODENet(device, data_handler.dim, explicit_time=settings['explicit_time'], neurons = settings['neurons_per_layer'], 
@@ -321,10 +324,10 @@ if __name__ == "__main__":
     odenet.float()
 
     my_current_custom_pruning_scores = {}
-    my_current_custom_pruning_scores['net_prods.linear_out'] = torch.ones(settings['neurons_per_layer'], data_handler.dim)
-    my_current_custom_pruning_scores['net_sums.linear_out'] = torch.ones(settings['neurons_per_layer'], data_handler.dim)
-    my_current_custom_pruning_scores['net_alpha_combine_sums.linear_out'] = torch.ones(data_handler.dim, settings['neurons_per_layer'])
-    my_current_custom_pruning_scores['net_alpha_combine_prods.linear_out'] = torch.ones(data_handler.dim, settings['neurons_per_layer'])
+    my_current_custom_pruning_scores['net_prods.linear_out'] = torch.rand(settings['neurons_per_layer'], data_handler.dim)
+    my_current_custom_pruning_scores['net_sums.linear_out'] = torch.rand(settings['neurons_per_layer'], data_handler.dim)
+    my_current_custom_pruning_scores['net_alpha_combine_sums.linear_out'] = torch.rand(data_handler.dim, settings['neurons_per_layer'])
+    my_current_custom_pruning_scores['net_alpha_combine_prods.linear_out'] = torch.rand(data_handler.dim, settings['neurons_per_layer'])
 
     print('Using optimizer: {}'.format(settings['optimizer']))
     if settings['optimizer'] == 'rmsprop':
@@ -458,23 +461,28 @@ if __name__ == "__main__":
                     if name in ['net_sums.linear_out','net_prods.linear_out'] and ((epoch == masking_start_epoch) or epoch % num_epochs_till_mask == 0): #name == 'net_prods.linear_out' or 
                         
                         mask_curr = my_current_custom_pruning_scores[name]
+                        S_S_transpose_inv = torch.inverse(torch.matmul(mask_curr, torch.transpose(mask_curr,0,1)))
                         S_PPI = torch.matmul(mask_curr, noisy_PPI)
+                        S_mask_best_guess = torch.matmul(S_S_transpose_inv, S_PPI)
                         
-                        updated_score = pruning_score_lambda_PPI * S_PPI + (1 - pruning_score_lambda_PPI) * current_NN_weights_abs
+                        updated_score = pruning_score_lambda_PPI * torch.abs(S_mask_best_guess) + (1 - pruning_score_lambda_PPI) * current_NN_weights_abs
                         
                         prune.l1_unstructured(module, name='weight', amount=prune_this_epoch, importance_scores = updated_score)
                         my_current_custom_pruning_scores[name] = updated_score
                         
                     elif name in['net_alpha_combine_sums.linear_out', 'net_alpha_combine_prods.linear_out'] and ((epoch == masking_start_epoch +0 ) or (epoch % num_epochs_till_mask == 0)):
 
+                        '''
                         if name == 'net_alpha_combine_sums.linear_out':
                             mask_curr = my_current_custom_pruning_scores['net_sums.linear_out']
                         else:
                             mask_curr = my_current_custom_pruning_scores['net_prods.linear_out']
+                        '''
+                        mask_curr = my_current_custom_pruning_scores[name]
                         
-                        T_tranpose_S_transpose = torch.transpose(torch.matmul(mask_curr,abs(noisy_prior_mat)),0,1)
-                        S_S_transpose_inv = torch.inverse(torch.matmul(mask_curr, torch.transpose(mask_curr,0,1)))
-                        C_mask_best_guess = torch.matmul(T_tranpose_S_transpose, S_S_transpose_inv)
+                        GG_C = torch.matmul(GG, mask_curr)
+                        C_transpose_C_inv = torch.inverse(torch.matmul(torch.transpose(mask_curr,0,1) , mask_curr))
+                        C_mask_best_guess = torch.matmul(GG_C, C_transpose_C_inv)
                         updated_score = pruning_score_lambda_motif * torch.abs(C_mask_best_guess)  + (1 - pruning_score_lambda_motif) * current_NN_weights_abs
                         
                         #updated_score = mask_T.contiguous()
