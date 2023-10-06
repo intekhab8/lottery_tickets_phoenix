@@ -307,17 +307,18 @@ if __name__ == "__main__":
     noisy_PPI = PPI
     noisy_prior_mat = prior_mat
     
-    loss_lambda_at_start =  1#0.99
-    loss_lambda_at_end = 1#0.99
+    loss_lambda_at_start =  0.99
+    loss_lambda_at_end = 0.99
     
 
     masking_start_epoch = 3
-    initial_hit_perc = 0.70
+    initial_hit_perc = 0#0.70
     num_epochs_till_mask = 10
-    prune_perc = 0.10
-    pruning_score_lambda_PPI = 0.50
-    pruning_score_lambda_motif = 0.50
+    prune_perc = 0#0.10
+    pruning_score_lambda_PPI = 0.05
+    pruning_score_lambda_motif = 0.005
     lr_schedule_patience = 2
+    prop_force_to_zero_for_loaded_model = 0
 
     odenet = ODENet(device, data_handler.dim, explicit_time=settings['explicit_time'], neurons = settings['neurons_per_layer'], 
                     log_scale = settings['log_scale'], init_bias_y = settings['init_bias_y'])
@@ -354,7 +355,7 @@ if __name__ == "__main__":
 
     if settings['pretrained_model']:
         pretrained_model_file = '/home/ubuntu/lottery_tickets_phoenix/ode_net/code/output/_pretrained_best_model/best_val_model.pt'
-        odenet.load(pretrained_model_file)
+        odenet.load(pretrained_model_file, prop_force_to_zero_for_loaded_model)
         #print("Loaded in pre-trained model!")
         
     with open('{}/network.txt'.format(output_root_dir), 'w') as net_file:
@@ -485,7 +486,7 @@ if __name__ == "__main__":
                         #C_transpose_C_inv = torch.inverse(torch.matmul(torch.transpose(mask_curr,0,1) , mask_curr))
                         #S_S_transpose_inv = torch.inverse(torch.matmul(incoming_mask_curr, torch.transpose(incoming_mask_curr,0,1)))
                         #C_mask_best_guess = torch.matmul(torch.matmul(GG_C, C_transpose_C_inv),S_S_transpose_inv)
-                        
+
                         updated_score = pruning_score_lambda_motif * torch.abs(C_mask_best_guess)  + (1 - pruning_score_lambda_motif) * current_NN_weights_abs
                         
                         #updated_score = mask_T.contiguous()

@@ -25,7 +25,7 @@ ODENet(
         return(final) 
 
 
-RANDOMIZED PRIOR
+RANDOMIZED PRIOR (flips = 0.5)
 
 lambda at start (first 5 epochs) = 0.99
 and then lambda = 0.99
