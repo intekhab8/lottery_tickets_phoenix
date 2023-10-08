@@ -19,7 +19,7 @@ except ImportError:
     from torchdiffeq import odeint_adjoint as odeint
 
 from datahandler import DataHandler
-from odenet import ODENet
+from odenet import ODENet, get_mask_smallest_p_proportion
 from read_config import read_arguments_from_file
 from solve_eq import solve_eq
 from visualization_inte import *
@@ -307,28 +307,34 @@ if __name__ == "__main__":
     noisy_PPI = PPI
     noisy_prior_mat = prior_mat
     
-    loss_lambda_at_start =  0.99
+    loss_lambda_at_start =0.99
     loss_lambda_at_end = 0.99
     
 
     masking_start_epoch = 3
-    initial_hit_perc = 0#0.70
+    initial_hit_perc = 0#0.95
     num_epochs_till_mask = 10
     prune_perc = 0#0.10
     pruning_score_lambda_PPI = 0.05
-    pruning_score_lambda_motif = 0.005
+    pruning_score_lambda_motif = 0.05
     lr_schedule_patience = 2
-    prop_force_to_zero_for_loaded_model = 0
+    prop_force_to_zero_for_loaded_model = 0.75
 
     odenet = ODENet(device, data_handler.dim, explicit_time=settings['explicit_time'], neurons = settings['neurons_per_layer'], 
                     log_scale = settings['log_scale'], init_bias_y = settings['init_bias_y'])
     odenet.float()
+
 
     my_current_custom_pruning_scores = {}
     my_current_custom_pruning_scores['net_prods.linear_out'] = torch.rand(settings['neurons_per_layer'], data_handler.dim)
     my_current_custom_pruning_scores['net_sums.linear_out'] = torch.rand(settings['neurons_per_layer'], data_handler.dim)
     my_current_custom_pruning_scores['net_alpha_combine_sums.linear_out'] = torch.rand(data_handler.dim, settings['neurons_per_layer'])
     my_current_custom_pruning_scores['net_alpha_combine_prods.linear_out'] = torch.rand(data_handler.dim, settings['neurons_per_layer'])
+
+    
+    if settings['pretrained_model']:
+        pretrained_model_file = '/home/ubuntu/lottery_tickets_phoenix/ode_net/code/output/_pretrained_best_model/best_val_model.pt'
+        odenet.inherit_params(pretrained_model_file)
 
     print('Using optimizer: {}'.format(settings['optimizer']))
     if settings['optimizer'] == 'rmsprop':
@@ -350,13 +356,8 @@ if __name__ == "__main__":
                 {'params': odenet.gene_multipliers,'lr': 5*settings['init_lr']}
                 
             ],  lr=settings['init_lr'], weight_decay=settings['weight_decay'])
+    
 
-
-
-    if settings['pretrained_model']:
-        pretrained_model_file = '/home/ubuntu/lottery_tickets_phoenix/ode_net/code/output/_pretrained_best_model/best_val_model.pt'
-        odenet.load(pretrained_model_file, prop_force_to_zero_for_loaded_model)
-        #print("Loaded in pre-trained model!")
         
     with open('{}/network.txt'.format(output_root_dir), 'w') as net_file:
         net_file.write(odenet.__str__())
@@ -374,7 +375,9 @@ if __name__ == "__main__":
         net_file.write('pruning score lambda (PPI, Motif) = ({}, {})'.format(pruning_score_lambda_PPI, pruning_score_lambda_motif))
         net_file.write('\n')
         net_file.write('Initial hit = {} at epoch {}, then prune {} every {} epochs'.format(initial_hit_perc, masking_start_epoch, prune_perc, num_epochs_till_mask))
-
+        if settings['pretrained_model']:
+            net_file.write('\n')
+            net_file.write('LOADED in a pre-trained model but forced lowest {} perc of params to zero'.format(prop_force_to_zero_for_loaded_model*100))
     
     # Init plot
     if settings['viz']:
@@ -399,12 +402,6 @@ if __name__ == "__main__":
     else:
         iterations_in_epoch = ceil(data_handler.train_data_length / settings['batch_size'])
 
-    if settings['viz']:
-        with torch.no_grad():
-            visualizer.visualize()
-            visualizer.plot()
-            visualizer.save(img_save_dir, 0)
-    start_time = perf_counter()
     #quit()
     
     tot_epochs = settings['epochs']
@@ -427,6 +424,27 @@ if __name__ == "__main__":
 
     scheduler = setOptimizerLRScheduler(patience=lr_schedule_patience)
 
+    if settings['pretrained_model'] and prop_force_to_zero_for_loaded_model>0:
+        total_pruned = 0
+        total_params = 0
+        for name, module in odenet.named_modules():
+            if isinstance(module, torch.nn.Linear):
+                prune.l1_unstructured(module, name='weight', amount = prop_force_to_zero_for_loaded_model) #, importance_scores = this_loaded_module_prune_score
+                print("SETTING LOWEST {} % OF ELEMENTS in {} TO ZERO".format(prop_force_to_zero_for_loaded_model*100, name))
+                total_params += module.weight.nelement()
+                total_pruned += torch.sum(module.weight == 0)
+        print("Updated mask based on prior! Current perc pruned: {:.2%}, num pruned: {}".format(total_pruned/total_params, total_pruned))
+    
+            
+    if settings['viz']:
+        with torch.no_grad():
+            visualizer.visualize()
+            visualizer.plot()
+            visualizer.save(img_save_dir, 0)
+    
+    start_time = perf_counter()
+    
+    
 
     for epoch in range(1, tot_epochs + 1):
         print()
@@ -435,6 +453,7 @@ if __name__ == "__main__":
         if epoch > 220: 
             num_epochs_till_mask = 20
             prune_perc = 0.05
+
 
         #Iterative magnitude pruning (IMP for lottery tickets)
         if (epoch == masking_start_epoch) or (epoch == masking_start_epoch +0 ) or (epoch >= masking_start_epoch and epoch < tot_epochs and epoch % num_epochs_till_mask in [0,0]):
@@ -447,7 +466,7 @@ if __name__ == "__main__":
             total_params = 0
 
             for name, module in odenet.named_modules():
-                if isinstance(module, torch.nn.Linear):
+                if isinstance(module, torch.nn.Linear): # and (prune_perc > 0 or initial_hit_perc > 0)
                     #current_NN_weights = module.weight.detach()
                     if name in ['net_sums.linear_out','net_alpha_combine_sums.linear_out','net_alpha_combine_prods.linear_out' ]: 
                         current_NN_weights_abs = abs(module.weight.detach()) #GRAD!.detach()

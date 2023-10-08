@@ -17,23 +17,20 @@ def get_zero_grad_hook(mask):
     return hook    
 
 
-def set_smallest_p_proportion_to_zero(my_tensor, p):
-    print("SETTING LOWEST",  p, "% OF ELEMENTS TO ZERO")
-    # Compute the P-th percentile of the tensor.
+def get_mask_smallest_p_proportion(my_tensor, p):
+    # Compute the P-th percentile of the absolute tensor.
     k = int(p * my_tensor.numel())
-    #print(k)
-    flattened_tensor = my_tensor.view(-1)
-    values, indices = torch.topk(flattened_tensor, k, largest=False)
+    abs_flattened_tensor = torch.abs(my_tensor.view(-1))
+    values, indices = torch.topk(abs_flattened_tensor, k, largest=False)
     p_th_percentile = values[-1]
-    #my_tensor = flattened_tensor.view_as(my_tensor)
 
     # Create a mask of all elements in the tensor that are greater than or equal to the
     # P-th percentile.
-    mask = torch.gt(my_tensor, p_th_percentile)
+    mask = torch.gt(torch.abs(my_tensor), p_th_percentile)
 
     # Multiply the tensor by the mask. This will set all elements in the tensor that
     # are less than or equal to the P-th percentile to 0.
-    return my_tensor * mask
+    return mask.long()
 
 class SoftsignMod(nn.Module):
     def __init__(self):
@@ -170,9 +167,42 @@ class ODENet(nn.Module):
         ''' Load a model from a dict file '''
         self.net.load_state_dict(torch.load(fp))
     
+    def inherit_params(self, fp):
+        idx = fp.index('.pt')
+        gene_mult_path = fp[:idx] + '_gene_multipliers' + fp[idx:]
+        prod_path =  fp[:idx] + '_prods' + fp[idx:]
+        sum_path = fp[:idx] + '_sums' + fp[idx:]
+        alpha_comb_sums_path = fp[:idx] + '_alpha_comb_sums' + fp[idx:]
+        alpha_comb_prods_path = fp[:idx] + '_alpha_comb_prods' + fp[idx:]
 
+        with torch.no_grad():
+            X = torch.load(prod_path)
+            self.net_prods.linear_out.weight = nn.Parameter(X.linear_out.weight) 
+            self.net_prods.linear_out.bias = nn.Parameter(X.linear_out.bias)
+
+            X = torch.load(sum_path)
+            self.net_sums.linear_out.weight = nn.Parameter(X.linear_out.weight) 
+            self.net_sums.linear_out.bias = nn.Parameter(X.linear_out.bias)
+
+            X = torch.load(alpha_comb_sums_path)
+            self.net_alpha_combine_sums.linear_out.weight = nn.Parameter(X.linear_out.weight) 
+
+            X = torch.load(alpha_comb_prods_path)
+            self.net_alpha_combine_prods.linear_out.weight = nn.Parameter(X.linear_out.weight) 
             
-    def load_model(self, fp, prop_force_to_zero = 0):
+            X = torch.load(gene_mult_path)
+            self.gene_multipliers = X
+            
+        self.net_prods.to('cpu')
+        self.net_sums.to('cpu')
+        self.gene_multipliers.to('cpu')
+        self.net_alpha_combine_sums.to('cpu')
+        self.net_alpha_combine_prods.to('cpu')
+
+        print("Inherited params from pre-trained model!")
+        
+            
+    def load_model(self, fp):
         ''' Load a model from a file '''
         idx = fp.index('.pt')
         gene_mult_path = fp[:idx] + '_gene_multipliers' + fp[idx:]
@@ -188,23 +218,17 @@ class ODENet(nn.Module):
         self.net_alpha_combine_prods = torch.load(alpha_comb_prods_path)
         
 
-        if prop_force_to_zero > 0: 
-            self.net_prods.linear_out.weight = set_smallest_p_proportion_to_zero(self.net_prods.linear_out.weight, prop_force_to_zero)
-            self.net_sums.linear_out.weight = set_smallest_p_proportion_to_zero(self.net_sums.linear_out.weight, prop_force_to_zero)
-            self.net_alpha_combine_sums.linear_out.weight = set_smallest_p_proportion_to_zero(self.net_alpha_combine_sums.linear_out.weight, prop_force_to_zero)    
-            self.net_alpha_combine_prods.linear_out.weight = set_smallest_p_proportion_to_zero(self.net_alpha_combine_prods.linear_out.weight, prop_force_to_zero)
-
         self.net_prods.to('cpu')
         self.net_sums.to('cpu')
         self.gene_multipliers.to('cpu')
         self.net_alpha_combine_sums.to('cpu')
         self.net_alpha_combine_prods.to('cpu')
 
-    def load(self, fp, prop_force_to_zero = 0):
+    def load(self, fp):
         ''' General loading from a file '''
         try:
             print('Trying to load model from file= {}'.format(fp))
-            self.load_model(fp, prop_force_to_zero)
+            self.load_model(fp)
             print('Done')
         except:
             print('Failed! Trying to load parameters from file...')
