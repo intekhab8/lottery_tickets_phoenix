@@ -72,7 +72,7 @@ def random_multiply(mat_torch):
 
   for i in range(mat_torch.size(0)):
     for j in range(mat_torch.size(1)):
-      if rand_torch[i, j] > 0.25:
+      if rand_torch[i, j] > 0.50:
         out_torch[i, j] = mat_torch[i, j] * -1 #flip
       else:
         out_torch[i, j] = mat_torch[i, j] * 1 #keep
@@ -189,7 +189,7 @@ def reset_lr(opt, verbose, old_lr):
 def setOptimizerLRScheduler(patience):
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(opt, mode='min', 
                                                      factor=0.9, patience=patience, threshold=1e-06, 
-                                                     threshold_mode='abs', cooldown=0, min_lr=4e-04, eps=1e-09, verbose=True)
+                                                     threshold_mode='abs', cooldown=0, min_lr=4e-05, eps=1e-09, verbose=True)
     return scheduler
 
 
@@ -291,34 +291,30 @@ if __name__ == "__main__":
     
     #Read in the prior matrix
     prior_mat_loc = '/home/ubuntu/lottery_tickets_phoenix/ground_truth_simulator/clean_data/edge_prior_matrix_chalmers_350_noise_{}.csv'.format(settings['noise'])
-    prior_mat = read_prior_matrix(prior_mat_loc, sparse = False, num_genes = data_handler.dim, randomize= False)
+    prior_mat = read_prior_matrix(prior_mat_loc, sparse = False, num_genes = data_handler.dim, randomize= True)
 
     batch_for_prior = (torch.rand(10000,1,prior_mat.shape[0], device = data_handler.device) - 0.5)
     prior_grad = torch.matmul(batch_for_prior,prior_mat) #can be any model here that predicts the derivative
-    pathway_loc =  '/home/ubuntu/lottery_tickets_phoenix/ground_truth_simulator/clean_data/pathway_prior.csv'
-    pathway_matrix = read_prior_matrix(pathway_loc, sparse = False, num_genes = data_handler.dim)
     PPI = torch.matmul(torch.abs(prior_mat), torch.transpose(torch.abs(prior_mat), 0, 1)) 
     PPI =  PPI / torch.sum(PPI) #normalize PPI
-    GG = torch.matmul(torch.transpose(torch.abs(prior_mat), 0, 1) , torch.abs(prior_mat)) 
-    GG =  GG / torch.sum(GG) #normalize GG
     
 
 
     noisy_PPI = PPI
     noisy_prior_mat = prior_mat
     
-    loss_lambda_at_start =0.99
-    loss_lambda_at_end = 0.99
+    loss_lambda_at_start = 0.97
+    loss_lambda_at_end = 0.97
     
 
     masking_start_epoch = 3
-    initial_hit_perc = 0#0.95
+    initial_hit_perc = 0.70
     num_epochs_till_mask = 10
-    prune_perc = 0#0.10
+    prune_perc = 0.10
     pruning_score_lambda_PPI = 0.05
-    pruning_score_lambda_motif = 0.05
+    pruning_score_lambda_motif = 0.01
     lr_schedule_patience = 2
-    prop_force_to_zero_for_loaded_model = 0.75
+    prop_force_to_zero_for_loaded_model = 0
 
     odenet = ODENet(device, data_handler.dim, explicit_time=settings['explicit_time'], neurons = settings['neurons_per_layer'], 
                     log_scale = settings['log_scale'], init_bias_y = settings['init_bias_y'])
@@ -334,7 +330,7 @@ if __name__ == "__main__":
     
     if settings['pretrained_model']:
         pretrained_model_file = '/home/ubuntu/lottery_tickets_phoenix/ode_net/code/output/_pretrained_best_model/best_val_model.pt'
-        odenet.inherit_params(pretrained_model_file)
+        odenet.load(pretrained_model_file)
 
     print('Using optimizer: {}'.format(settings['optimizer']))
     if settings['optimizer'] == 'rmsprop':
@@ -406,7 +402,7 @@ if __name__ == "__main__":
     
     tot_epochs = settings['epochs']
     #viz_epochs = [round(tot_epochs*1/5), round(tot_epochs*2/5), round(tot_epochs*3/5), round(tot_epochs*4/5),tot_epochs]
-    rep_epochs = [1, 5, 7, 10, 15, 25, 30, 40, 50, 60, 70, 80, 100, 120, 150, 180, 200,220, 240, 260, 280, 300, 350, tot_epochs]
+    rep_epochs = [5, 10, 15, 30, 40, 50, 75, 100, 120, 150, 180, 200,220, 240, 260, 280, 300, 350, tot_epochs]
     viz_epochs = rep_epochs
     zeroth_drop_done = False
     first_drop_done = False 
@@ -501,11 +497,7 @@ if __name__ == "__main__":
                         S_S_transpose_inv = torch.inverse(torch.matmul(incoming_mask_curr, torch.transpose(incoming_mask_curr,0,1)))
                         C_mask_best_guess = torch.matmul(T_tranpose_S_transpose, S_S_transpose_inv)
 
-                        #GG_C = torch.matmul(GG, mask_curr)
-                        #C_transpose_C_inv = torch.inverse(torch.matmul(torch.transpose(mask_curr,0,1) , mask_curr))
-                        #S_S_transpose_inv = torch.inverse(torch.matmul(incoming_mask_curr, torch.transpose(incoming_mask_curr,0,1)))
-                        #C_mask_best_guess = torch.matmul(torch.matmul(GG_C, C_transpose_C_inv),S_S_transpose_inv)
-
+                        
                         updated_score = pruning_score_lambda_motif * torch.abs(C_mask_best_guess)  + (1 - pruning_score_lambda_motif) * current_NN_weights_abs
                         
                         #updated_score = mask_T.contiguous()
