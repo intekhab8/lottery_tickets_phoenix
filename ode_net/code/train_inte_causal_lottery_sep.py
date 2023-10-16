@@ -303,8 +303,8 @@ if __name__ == "__main__":
     noisy_PPI = PPI
     noisy_prior_mat = prior_mat
     
-    loss_lambda_at_start = 0.97
-    loss_lambda_at_end = 0.97
+    loss_lambda_at_start = 1#0.99
+    loss_lambda_at_end = 1#0.99
     
 
     masking_start_epoch = 3
