@@ -303,18 +303,18 @@ if __name__ == "__main__":
     noisy_PPI = PPI
     noisy_prior_mat = prior_mat
     
-    loss_lambda_at_start = 1#0.99
-    loss_lambda_at_end = 1#0.99
+    loss_lambda_at_start = 0.99
+    loss_lambda_at_end = 0.99
     
 
     masking_start_epoch = 3
-    initial_hit_perc = 0.70
+    initial_hit_perc = 0#0.70
     num_epochs_till_mask = 10
-    prune_perc = 0.10
-    pruning_score_lambda_PPI = 0.05
-    pruning_score_lambda_motif = 0.01
+    prune_perc = 0#0.10
+    pruning_score_lambda_PPI = 0.01
+    pruning_score_lambda_motif = 0.05
     lr_schedule_patience = 2
-    prop_force_to_zero_for_loaded_model = 0
+    prop_force_to_zero_for_loaded_model = 0.90
 
     odenet = ODENet(device, data_handler.dim, explicit_time=settings['explicit_time'], neurons = settings['neurons_per_layer'], 
                     log_scale = settings['log_scale'], init_bias_y = settings['init_bias_y'])
@@ -330,7 +330,7 @@ if __name__ == "__main__":
     
     if settings['pretrained_model']:
         pretrained_model_file = '/home/ubuntu/lottery_tickets_phoenix/ode_net/code/output/_pretrained_best_model/best_val_model.pt'
-        odenet.load(pretrained_model_file)
+        odenet.inherit_params(pretrained_model_file)
 
     print('Using optimizer: {}'.format(settings['optimizer']))
     if settings['optimizer'] == 'rmsprop':

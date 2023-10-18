@@ -30,3 +30,5 @@ causal lottery!
 doing PPI mask + T mask
 pruning score lambda (PPI, Motif) = (0.05, 0.01)
 Initial hit = 0 at epoch 3, then prune 0 every 10 epochs
+
+RANDOM PRIOR FLIPS, 0.5
