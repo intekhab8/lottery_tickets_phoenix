@@ -308,13 +308,13 @@ if __name__ == "__main__":
     
 
     masking_start_epoch = 3
-    initial_hit_perc = 0#0.70
+    initial_hit_perc = 0 #0.70
     num_epochs_till_mask = 10
-    prune_perc = 0#0.10
-    pruning_score_lambda_PPI = 0.01
-    pruning_score_lambda_motif = 0.05
+    prune_perc = 0 #0.10
+    pruning_score_lambda_PPI = 0.50
+    pruning_score_lambda_motif = 0.05# 0.01
     lr_schedule_patience = 2
-    prop_force_to_zero_for_loaded_model = 0.90
+    prop_force_to_zero_for_loaded_model = 0.83
 
     odenet = ODENet(device, data_handler.dim, explicit_time=settings['explicit_time'], neurons = settings['neurons_per_layer'], 
                     log_scale = settings['log_scale'], init_bias_y = settings['init_bias_y'])
