@@ -53,7 +53,8 @@ class Visualizator1D(Visualizator):
         
         #breast cancer genes 
         #self.genes_to_viz = [3106,7007, 556, 3072, 831, 1031, 1032, 5012, 6093] + sorted(random.sample(range(self.data_handler.dim),21)) #desmedt genes
-        
+        self.genes_to_viz = [9697, 277, 8506, 8504, 3105, 8535, 7104, 9699, 2079, 3190, 6450, 8505, 7006, 1209, 9684, 5086, 6611, 8426, 3649, 2340, 3967, 6148, 3961, 9837, 1733, 8523, 5793, 2629, 9373, 555]
+
         self.axes_traj_split = self.fig_traj_split.subplots(nrows=self.TOT_ROWS, ncols=self.TOT_COLS, sharex=False, sharey=True, subplot_kw={'frameon':True})
         
         self.legend_traj = [Line2D([0], [0], color='black', linestyle='-.', label='NN approx. of dynamics'),Line2D([0], [0], color='green', linestyle='-', label='True dynamics'),Line2D([0], [0], marker='o', color='red', label='Observed data', markerfacecolor='red', markersize=5)]
@@ -84,7 +85,7 @@ class Visualizator1D(Visualizator):
 
         #self.time_span = (np.min([np.min(time[:]) for time in times]),
         #                  np.max([np.max(time[:]) for time in times]))
-        self.time_span = (0.0, 15)
+        self.time_span = (0.0, 1.5)
         self.time_width = self.time_span[1] - self.time_span[0]
 
     
