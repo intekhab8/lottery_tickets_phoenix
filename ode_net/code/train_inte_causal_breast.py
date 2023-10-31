@@ -30,6 +30,7 @@ def plot_MSE_new(epoch_so_far, training_loss, validation_loss, true_mean_losses,
     
     # Create two subplots, one for the main MSE loss plot and one for the prior loss plot.
     fig, (ax1, ax2) = plt.subplots(1, 2, sharey=False)
+    fig.set_size_inches(12, 6)
 
     ax1.plot(range(1, epoch_so_far + 1), training_loss, color="blue", label="Training loss")
     if len(validation_loss) > 0:
@@ -47,7 +48,8 @@ def plot_MSE_new(epoch_so_far, training_loss, validation_loss, true_mean_losses,
     ax2.set_ylabel("Error (MSE)")
     ax2.set_title("Prior Loss")
 
-    plt.subplots_adjust(wspace=0.3)
+    #plt.subplots_adjust(wspace=0.3)
+    fig.tight_layout()
     plt.savefig("{}/MSE_loss.png".format(img_save_dir))
     np.savetxt('{}full_loss_info.csv'.format(output_root_dir), np.c_[training_loss, validation_loss, true_mean_losses, true_mean_losses_init_val_based], delimiter=',')
 
@@ -332,10 +334,10 @@ if __name__ == "__main__":
 
     masking_start_epoch = 5
     initial_hit_perc = 0.80
-    num_epochs_till_mask = 20
+    num_epochs_till_mask = 40
     prune_perc = 0.20
-    pruning_score_lambda_PPI =  0#0.9995
-    pruning_score_lambda_motif = 0#0.9995
+    pruning_score_lambda_PPI =  0.9995
+    pruning_score_lambda_motif = 0.9995
     lr_schedule_patience = 3
     prop_force_to_zero_for_loaded_model = 0
 
@@ -425,7 +427,7 @@ if __name__ == "__main__":
     
     tot_epochs = settings['epochs']
     #viz_epochs = [round(tot_epochs*1/5), round(tot_epochs*2/5), round(tot_epochs*3/5), round(tot_epochs*4/5),tot_epochs]
-    rep_epochs = [1, 5, 10, 15, 30, 40, 50, 75, 100, 120, 150, 180, 200,220, 240, 260, 280, 300, 350, tot_epochs]
+    rep_epochs = [ 1, 5, 15, 30, 40, 50, 75, 100, 120, 150, 180, 200,220, 240, 260, 280, 300, 350, tot_epochs]
     viz_epochs = rep_epochs
     zeroth_drop_done = False
     first_drop_done = False 
@@ -685,17 +687,12 @@ if __name__ == "__main__":
                 L = [rep_epochs_so_far, rep_epochs_time_so_far, rep_epochs_train_losses, rep_epochs_val_losses, rep_epochs_mu_losses]
                 np.savetxt('{}rep_epoch_losses.csv'.format(output_root_dir), np.transpose(L), delimiter=',')    
             
-            print("Saving best intermediate val model..")
-            interm_model_file_name = 'trained_model_epoch_' + str(epoch)
-            save_model(odenet, interm_models_save_dir , interm_model_file_name)
-                
+            if epoch >= 75:
+                print("Saving best intermediate val model..")
+                interm_model_file_name = 'trained_model_epoch_' + str(epoch)
+                save_model(odenet, interm_models_save_dir , interm_model_file_name)
+                    
             
-            #else:
-            #    L = [rep_epochs_so_far, rep_epochs_time_so_far, rep_epochs_train_losses, rep_epochs_mu_losses]
-            #    np.savetxt('{}rep_epoch_losses.csv'.format(output_root_dir), np.transpose(L), delimiter=',')    
-           
-        
-
         if consec_epochs_failed==epochs_to_fail_to_terminate:
             print("Went {} epochs without improvement; terminating.".format(epochs_to_fail_to_terminate))
             break
