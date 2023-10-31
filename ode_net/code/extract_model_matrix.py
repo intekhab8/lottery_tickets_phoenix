@@ -38,11 +38,11 @@ def make_mask(X):
     X[main_mask] = 0
 
 
-sums_model = torch.load('/home/ubuntu/lottery_tickets_phoenix/ode_net/code/output/_pretrained_best_model/trained_model_epoch_100_sums.pt')
-prods_model = torch.load('/home/ubuntu/lottery_tickets_phoenix/ode_net/code/output/_pretrained_best_model/trained_model_epoch_100_prods.pt')
-alpha_comb_sums = torch.load('/home/ubuntu/lottery_tickets_phoenix/ode_net/code/output/_pretrained_best_model/trained_model_epoch_100_alpha_comb_sums.pt')
-alpha_comb_prods = torch.load('/home/ubuntu/lottery_tickets_phoenix/ode_net/code/output/_pretrained_best_model/trained_model_epoch_100_alpha_comb_prods.pt')
-gene_mult = torch.load('/home/ubuntu/lottery_tickets_phoenix/ode_net/code/output/_pretrained_best_model/trained_model_epoch_100_gene_multipliers.pt')
+sums_model = torch.load('/home/ubuntu/lottery_tickets_phoenix/ode_net/code/output/_pretrained_best_model/best_val_model_sums.pt')
+prods_model = torch.load('/home/ubuntu/lottery_tickets_phoenix/ode_net/code/output/_pretrained_best_model/best_val_model_prods.pt')
+alpha_comb_sums = torch.load('/home/ubuntu/lottery_tickets_phoenix/ode_net/code/output/_pretrained_best_model/best_val_model_alpha_comb_sums.pt')
+alpha_comb_prods = torch.load('/home/ubuntu/lottery_tickets_phoenix/ode_net/code/output/_pretrained_best_model/best_val_model_alpha_comb_prods.pt')
+gene_mult = torch.load('/home/ubuntu/lottery_tickets_phoenix/ode_net/code/output/_pretrained_best_model/best_val_model_gene_multipliers.pt')
 
 print(torch.sum(sums_model.linear_out.weight==0)/torch.numel(sums_model.linear_out.weight))
 Wo_sums = np.transpose(sums_model.linear_out.weight.detach().numpy())
@@ -54,8 +54,9 @@ alpha_comb_prods = np.transpose(alpha_comb_prods.linear_out.weight.detach().nump
 gene_mult = np.transpose(torch.relu(gene_mult.detach()).numpy())
 
 effects_mat = np.matmul(Wo_sums,alpha_comb_sums) + np.matmul(Wo_prods,alpha_comb_prods)
-effects_mat =   effects_mat #gene_mult.T*
-make_mask(effects_mat)
+#effects_mat[effects_mat != 0] = 1 # Set all non-zero elements to 1
+#effects_mat =   effects_mat #gene_mult.T*
+#make_mask(effects_mat)
 
 np.savetxt("/home/ubuntu/lottery_tickets_phoenix/ode_net/code/model_inspect/effects_mat.csv", effects_mat, delimiter=",")
 

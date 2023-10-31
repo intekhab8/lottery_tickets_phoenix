@@ -16,7 +16,7 @@ gene_eff <- melt(gene_eff,
                  variable.name = "aff", value.name = "effect")
 gene_eff[,aff := gsub("V","",aff)]
 
-cell_names <- data.table(read.delim("/home/ubuntu/lottery_tickets_phoenix/ode_net/code/markdown_items/gene_names_350.csv",
+cell_names <- data.table(read.delim("/home/ubuntu/lottery_tickets_phoenix/ode_net/code/markdown_items/desmedt_gene_names_11165.csv",
                          sep = ",",
                          header = T))
 cell_names[,x:= gsub("_input","", x)]
@@ -33,7 +33,7 @@ gene_eff[is.na(prop_effect), prop_effect :=0 ]
 #gene_eff[, effect := NULL]
 
 print("getting true edges")
-true_edges <- fread("/home/ubuntu/lottery_tickets_phoenix/ode_net/code/markdown_items/edge_properties_350.csv")
+true_edges <- fread("/home/ubuntu/lottery_tickets_phoenix/ode_net/code/markdown_items/otter_chip_val_clean.csv")
 
 #true_edges <- true_edges[p_val < 0.001,]
 #true_edges[, num_edges_for_this_TF := .N, by = from]
@@ -57,9 +57,11 @@ print("getting confusion-matrix values")
 library(PRROC)
 PRROC_obj <- roc.curve(scores.class0 = gene_eff$prop_effect,
                       weights.class0 = !is.na(gene_eff$activation_sym),
-                       curve= T) #curve = TRUE
+                       curve= F) #curve = TRUE
 
 print(paste("AUC =", PRROC_obj$auc))
+
+quit()
 
  best_index <- which.max(1-PRROC_obj$curve[,1]+PRROC_obj$curve[,2])
 
