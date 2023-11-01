@@ -314,7 +314,7 @@ if __name__ == "__main__":
     pruning_score_lambda_PPI = 0.5
     pruning_score_lambda_motif = 0.05# 0.01
     lr_schedule_patience = 2
-    prop_force_to_zero_for_loaded_model = 0
+    prop_force_to_zero_for_loaded_model = 0.87
 
     odenet = ODENet(device, data_handler.dim, explicit_time=settings['explicit_time'], neurons = settings['neurons_per_layer'], 
                     log_scale = settings['log_scale'], init_bias_y = settings['init_bias_y'])
@@ -329,7 +329,7 @@ if __name__ == "__main__":
 
     
     if settings['pretrained_model']:
-        pretrained_model_file = '/home/ubuntu/lottery_tickets_phoenix/ode_net/code/output/_pretrained_best_model/best_val_model.pt'
+        pretrained_model_file = '/home/ubuntu/lottery_tickets_phoenix/ode_net/code/output/_holder_model_to_prune/best_val_model.pt'
         odenet.inherit_params(pretrained_model_file)
 
     print('Using optimizer: {}'.format(settings['optimizer']))
@@ -364,13 +364,17 @@ if __name__ == "__main__":
         net_file.write('\n')
         net_file.write('and then lambda = {}'.format(loss_lambda_at_end))
         net_file.write('\n')
-        net_file.write('causal lottery!')
-        net_file.write('\n')
-        net_file.write('doing PPI mask + T mask')
-        net_file.write('\n')
-        net_file.write('pruning score lambda (PPI, Motif) = ({}, {})'.format(pruning_score_lambda_PPI, pruning_score_lambda_motif))
-        net_file.write('\n')
-        net_file.write('Initial hit = {} at epoch {}, then prune {} every {} epochs'.format(initial_hit_perc, masking_start_epoch, prune_perc, num_epochs_till_mask))
+        if prune_perc > 0 or initial_hit_perc > 0:
+            net_file.write('causal lottery!')
+            net_file.write('\n')
+            net_file.write('doing PPI mask + T mask')
+            net_file.write('\n')
+            net_file.write('pruning score lambda (PPI, Motif) = ({}, {})'.format(pruning_score_lambda_PPI, pruning_score_lambda_motif))
+            net_file.write('\n')
+            net_file.write('Initial hit = {} at epoch {}, then prune {} every {} epochs'.format(initial_hit_perc, masking_start_epoch, prune_perc, num_epochs_till_mask))
+        else:
+            net_file.write('No pruning!')
+            net_file.write('\n')
         if settings['pretrained_model']:
             net_file.write('\n')
             net_file.write('LOADED in a pre-trained model but forced lowest {} perc of params to zero'.format(prop_force_to_zero_for_loaded_model*100))
