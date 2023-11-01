@@ -596,3 +596,5 @@ ode_net/code/output/_old_breast_cancer/2023-10-26(7;9)_desmedt_11165genes_1sampl
 ode_net/code/output/_old_breast_cancer/2023-10-26(7;9)_desmedt_11165genes_1sample_186T_300epochs/interm_models/trained_model_epoch_150_gene_multipliers.pt
 ode_net/code/output/_old_breast_cancer/2023-10-26(7;9)_desmedt_11165genes_1sample_186T_300epochs/interm_models/trained_model_epoch_150_prods.pt
 ode_net/code/output/_old_breast_cancer/2023-10-26(7;9)_desmedt_11165genes_1sample_186T_300epochs/interm_models/trained_model_epoch_150_sums.pt
+ode_net/code/model_inspect/alpha_comb.csv
+ode_net/code/model_inspect/alpha_comb.csv

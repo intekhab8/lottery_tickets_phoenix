@@ -308,10 +308,10 @@ if __name__ == "__main__":
     
 
     masking_start_epoch = 3
-    initial_hit_perc = 0 #0.70
+    initial_hit_perc = 0#0.70
     num_epochs_till_mask = 10
-    prune_perc = 0 #0.10
-    pruning_score_lambda_PPI = 0.50
+    prune_perc = 0#0.10
+    pruning_score_lambda_PPI = 0.5
     pruning_score_lambda_motif = 0.05# 0.01
     lr_schedule_patience = 2
     prop_force_to_zero_for_loaded_model = 0
