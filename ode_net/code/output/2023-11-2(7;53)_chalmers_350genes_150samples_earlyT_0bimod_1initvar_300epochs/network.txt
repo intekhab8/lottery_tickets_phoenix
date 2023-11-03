@@ -1,0 +1,31 @@
+ODENet(
+  (net_prods): Sequential(
+    (activation_0): LogShiftedSoftSignMod()
+    (linear_out): Linear(in_features=350, out_features=40, bias=True)
+  )
+  (net_sums): Sequential(
+    (activation_0): SoftsignMod()
+    (linear_out): Linear(in_features=350, out_features=40, bias=True)
+  )
+  (net_alpha_combine_sums): Sequential(
+    (linear_out): Linear(in_features=40, out_features=350, bias=False)
+  )
+  (net_alpha_combine_prods): Sequential(
+    (linear_out): Linear(in_features=40, out_features=350, bias=False)
+  )
+)
+
+
+    def forward(self, t, y):
+        sums = self.net_sums(y)
+        prods = torch.exp(self.net_prods(y))
+        joint = self.net_alpha_combine_sums(sums) + self.net_alpha_combine_prods(prods)
+        #final = joint-torch.relu(self.gene_multipliers)*y
+        final = torch.relu(self.gene_multipliers)*(joint-y)
+        return(final) 
+
+lambda at start (first 5 epochs) = 0.99
+and then lambda = 0.99
+No pruning!
+
+LOADED in a pre-trained model but forced lowest 83.0 perc of params to zero
