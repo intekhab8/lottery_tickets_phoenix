@@ -80,14 +80,14 @@ def random_multiply(mat_torch):
   return out_torch
 
 
-def read_prior_matrix(prior_mat_file_loc, sparse = False, num_genes = 11165, randomize = False):
+def read_prior_matrix(prior_mat_file_loc, sparse = False, num_genes = 11165, absolute = False):
     if sparse == False: 
         mat = np.genfromtxt(prior_mat_file_loc,delimiter=',')
         mat_torch = torch.from_numpy(mat)
         mat_torch = mat_torch.float()
-        if randomize:
-            print("I AM RANDOMLY FLIPPING EDGE SIGNS!")
-            mat_torch = random_multiply(mat_torch)
+        if absolute:
+            print("I AM SWITCHING ALL EDGE SIGNS to POSITIVE!")
+            mat_torch = torch.abs(mat_torch)
         return mat_torch
     else: #when scaling up >10000
         mat = np.genfromtxt(prior_mat_file_loc,delimiter=',')
@@ -291,7 +291,8 @@ if __name__ == "__main__":
     
     #Read in the prior matrix
     prior_mat_loc = '/home/ubuntu/lottery_tickets_phoenix/ground_truth_simulator/clean_data/edge_prior_matrix_chalmers_350_noise_{}.csv'.format(settings['noise'])
-    prior_mat = read_prior_matrix(prior_mat_loc, sparse = False, num_genes = data_handler.dim, randomize= True)
+    absolute_flag = True
+    prior_mat = read_prior_matrix(prior_mat_loc, sparse = False, num_genes = data_handler.dim, absolute = absolute_flag)
 
     batch_for_prior = (torch.rand(10000,1,prior_mat.shape[0], device = data_handler.device) - 0.5)
     prior_grad = torch.matmul(batch_for_prior,prior_mat) #can be any model here that predicts the derivative
@@ -308,13 +309,13 @@ if __name__ == "__main__":
     
 
     masking_start_epoch = 3
-    initial_hit_perc = 0#0.70
+    initial_hit_perc = 0# 0.70
     num_epochs_till_mask = 10
-    prune_perc = 0#0.10
-    pruning_score_lambda_PPI = 0.5
-    pruning_score_lambda_motif = 0.05# 0.01
+    prune_perc = 0 #0.10
+    pruning_score_lambda_PPI = 0 #0.50 
+    pruning_score_lambda_motif = 0 #0.05
     lr_schedule_patience = 2
-    prop_force_to_zero_for_loaded_model = 0.87
+    prop_force_to_zero_for_loaded_model = 0
 
     odenet = ODENet(device, data_handler.dim, explicit_time=settings['explicit_time'], neurons = settings['neurons_per_layer'], 
                     log_scale = settings['log_scale'], init_bias_y = settings['init_bias_y'])
@@ -359,6 +360,9 @@ if __name__ == "__main__":
         net_file.write(odenet.__str__())
         net_file.write('\n\n\n')
         net_file.write(inspect.getsource(ODENet.forward))
+        if absolute_flag:
+            net_file.write('\n')
+            net_file.write("I AM SWITCHING ALL EDGE SIGNS to POSITIVE!")
         net_file.write('\n')
         net_file.write('lambda at start (first 5 epochs) = {}'.format(loss_lambda_at_start))
         net_file.write('\n')
@@ -665,14 +669,11 @@ if __name__ == "__main__":
                 L = [rep_epochs_so_far, rep_epochs_time_so_far, rep_epochs_train_losses, rep_epochs_val_losses, rep_epochs_mu_losses]
                 np.savetxt('{}rep_epoch_losses.csv'.format(output_root_dir), np.transpose(L), delimiter=',')    
             
-            print("Saving best intermediate val model..")
-            interm_model_file_name = 'trained_model_epoch_' + str(epoch)
-            save_model(odenet, interm_models_save_dir , interm_model_file_name)
+            #print("Saving best intermediate val model..")
+            #interm_model_file_name = 'trained_model_epoch_' + str(epoch)
+            #save_model(odenet, interm_models_save_dir , interm_model_file_name)
                 
             
-            #else:
-            #    L = [rep_epochs_so_far, rep_epochs_time_so_far, rep_epochs_train_losses, rep_epochs_mu_losses]
-            #    np.savetxt('{}rep_epoch_losses.csv'.format(output_root_dir), np.transpose(L), delimiter=',')    
            
         
 
