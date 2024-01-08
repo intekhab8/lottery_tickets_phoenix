@@ -291,7 +291,7 @@ if __name__ == "__main__":
     
     #Read in the prior matrix
     prior_mat_loc = '/home/ubuntu/lottery_tickets_phoenix/ground_truth_simulator/clean_data/edge_prior_matrix_chalmers_350_noise_{}.csv'.format(settings['noise'])
-    absolute_flag = True
+    absolute_flag = False
     prior_mat = read_prior_matrix(prior_mat_loc, sparse = False, num_genes = data_handler.dim, absolute = absolute_flag)
 
     batch_for_prior = (torch.rand(10000,1,prior_mat.shape[0], device = data_handler.device) - 0.5)
@@ -308,14 +308,15 @@ if __name__ == "__main__":
     loss_lambda_at_end = 0.99
     
 
-    masking_start_epoch = 3
-    initial_hit_perc = 0# 0.70
+    masking_start_epoch = 2
+    initial_hit_perc = 0 #0.70
     num_epochs_till_mask = 10
     prune_perc = 0 #0.10
-    pruning_score_lambda_PPI = 0 #0.50 
-    pruning_score_lambda_motif = 0 #0.05
-    lr_schedule_patience = 2
-    prop_force_to_zero_for_loaded_model = 0
+    pruning_score_lambda_PPI = 0.05 
+    pruning_score_lambda_motif = 0.01
+    lr_schedule_patience = 3
+    prop_force_to_zero_for_loaded_model = 0.92
+    consider_multipliers = True
 
     odenet = ODENet(device, data_handler.dim, explicit_time=settings['explicit_time'], neurons = settings['neurons_per_layer'], 
                     log_scale = settings['log_scale'], init_bias_y = settings['init_bias_y'])
@@ -372,6 +373,11 @@ if __name__ == "__main__":
             net_file.write('causal lottery!')
             net_file.write('\n')
             net_file.write('doing PPI mask + T mask')
+            if consider_multipliers: 
+                net_file.write('\n')
+                net_file.write('.....')
+                net_file.write('Considering multipliers for final layer pruning')   
+                net_file.write('.....')
             net_file.write('\n')
             net_file.write('pruning score lambda (PPI, Motif) = ({}, {})'.format(pruning_score_lambda_PPI, pruning_score_lambda_motif))
             net_file.write('\n')
@@ -382,6 +388,11 @@ if __name__ == "__main__":
         if settings['pretrained_model']:
             net_file.write('\n')
             net_file.write('LOADED in a pre-trained model but forced lowest {} perc of params to zero'.format(prop_force_to_zero_for_loaded_model*100))
+            if consider_multipliers: 
+                net_file.write('\n')
+                net_file.write('.....')
+                net_file.write('Considering multipliers for forced zeroing of pre-trained model')   
+                net_file.write('.....')
     
     # Init plot
     if settings['viz']:
@@ -433,7 +444,18 @@ if __name__ == "__main__":
         total_params = 0
         for name, module in odenet.named_modules():
             if isinstance(module, torch.nn.Linear):
-                prune.l1_unstructured(module, name='weight', amount = prop_force_to_zero_for_loaded_model) #, importance_scores = this_loaded_module_prune_score
+                if name in ['net_alpha_combine_sums.linear_out' , 'net_alpha_combine_prods.linear_out']:
+                    if consider_multipliers:
+                        print("Considering multipliers for zeroing of final layers")
+                        current_NN_weights_abs = abs(module.weight.detach())
+                        current_gene_mult_ReLU = torch.relu(odenet.gene_multipliers.detach().t())
+                        this_loaded_module_prune_score = current_NN_weights_abs * current_gene_mult_ReLU
+                        prune.l1_unstructured(module, name='weight', amount = prop_force_to_zero_for_loaded_model, importance_scores = this_loaded_module_prune_score) #CHANGE THIS!
+                    else:
+                        prune.l1_unstructured(module, name='weight', amount = prop_force_to_zero_for_loaded_model)        
+                else:
+                    prune.l1_unstructured(module, name='weight', amount = prop_force_to_zero_for_loaded_model) 
+                
                 print("SETTING LOWEST {} % OF ELEMENTS in {} TO ZERO".format(prop_force_to_zero_for_loaded_model*100, name))
                 total_params += module.weight.nelement()
                 total_pruned += torch.sum(module.weight == 0)
@@ -472,7 +494,7 @@ if __name__ == "__main__":
             for name, module in odenet.named_modules():
                 if isinstance(module, torch.nn.Linear): # and (prune_perc > 0 or initial_hit_perc > 0)
                     #current_NN_weights = module.weight.detach()
-                    if name in ['net_sums.linear_out','net_alpha_combine_sums.linear_out','net_alpha_combine_prods.linear_out' ]: 
+                    if name == 'net_sums.linear_out': 
                         current_NN_weights_abs = abs(module.weight.detach()) #GRAD!.detach()
                         current_NN_weights_abs = current_NN_weights_abs/torch.sum(current_NN_weights_abs) #trying normalization this for PPI layers+
                         
@@ -481,6 +503,12 @@ if __name__ == "__main__":
                         current_NN_weights_abs = torch.exp(module.weight.detach()) #GRAD! 
                         current_NN_weights_abs = current_NN_weights_abs/torch.sum(current_NN_weights_abs) #trying normalization this for PPI layers
 
+                    elif name in ['net_alpha_combine_sums.linear_out','net_alpha_combine_prods.linear_out' ]: 
+                        current_NN_weights_abs = abs(module.weight.detach()) #GRAD!.detach()
+                        if consider_multipliers:
+                            current_gene_mult_ReLU = torch.relu(odenet.gene_multipliers.detach().t())
+                            current_NN_weights_abs = current_NN_weights_abs * current_gene_mult_ReLU
+                        current_NN_weights_abs = current_NN_weights_abs/torch.sum(current_NN_weights_abs) #trying normalization this for PPI layers+
                     
                     if name in ['net_sums.linear_out','net_prods.linear_out'] and ((epoch == masking_start_epoch) or epoch % num_epochs_till_mask == 0): #name == 'net_prods.linear_out' or 
                         
