@@ -247,9 +247,7 @@ class DataHandler:
     def get_mu0(self):
         return [tensor[0] for tensor in self.data_pt_0noise]
     
-    def get_mu1(self):
-        return [tensor[0] for tensor in self.data_pt_0noise]
-
+    
     
     def get_true_mu_set_pairwise(self, val_only = False, batch_type = "trajectory"):
         if batch_type == "trajectory":
@@ -305,9 +303,47 @@ class DataHandler:
         return times
 
     def calculate_trajectory(self, odenet, method, num_val_trajs, fixed_traj_idx = None):
+            #print(self.val_set_indx)
+            #print(num_val_trajs)
+            extrap_time_points = np.arange(0,15,0.05) 
+            extrap_time_points_pt = torch.from_numpy(extrap_time_points)
+            trajectories = []
+            mu0 = self.get_mu0()
+            mu1 = self.get_mu1() #remove later
+            if self.val_split == 1:
+                if fixed_traj_idx is None:
+                    all_plotted_samples = sorted(np.random.choice(self.val_set_indx, num_val_trajs, replace=False))
+                else:
+                    all_plotted_samples = fixed_traj_idx
+            else:
+                if num_val_trajs >0 :
+                    all_plotted_samples = sorted(np.random.choice(self.val_set_indx, num_val_trajs, replace=False)) + sorted(np.random.choice(self.train_set_original, self.num_trajs_to_plot - num_val_trajs, replace=False))
+                else:
+                    if self.batch_type == "single":
+                        try:
+                            all_plotted_samples = sorted(np.random.choice(list(set([x[0] for x in self.train_set_original])), self.num_trajs_to_plot, replace=False))
+                        except:
+                            all_plotted_samples = sorted(list(set([x[0] for x in self.train_set_original])))   #if very few samplesE (e.g y5 dataset, calico)
+                    else:
+                        all_plotted_samples = sorted(np.random.choice(self.train_set_original, self.num_trajs_to_plot, replace=False))
+            
+            for j in all_plotted_samples:
+                if odenet.explicit_time:
+                    _y = torch.cat((mu0[j], self.time_pt[j][0].reshape((1, 1))), 1)
+                else:
+                    _y = mu0[j]
+                
+                y = odeint(odenet, _y, extrap_time_points_pt   , method=method) + self.init_bias_y #self.time_pt[j][0:]#extrap_time_points_pt # #  
+                y = torch.Tensor.cpu(y)
+                trajectories.append(y)
+            return trajectories, all_plotted_samples, extrap_time_points
+
+
+
+    def calculate_trajectory_pathreg(self, pathreg_model, method, num_val_trajs, fixed_traj_idx = None):
         #print(self.val_set_indx)
         #print(num_val_trajs)
-        extrap_time_points = np.arange(0,15,0.05) 
+        extrap_time_points = np.arange(0,15,0.5) 
         extrap_time_points_pt = torch.from_numpy(extrap_time_points)
         trajectories = []
         mu0 = self.get_mu0()
@@ -330,14 +366,10 @@ class DataHandler:
                     all_plotted_samples = sorted(np.random.choice(self.train_set_original, self.num_trajs_to_plot, replace=False))
         
         for j in all_plotted_samples:
-            if odenet.explicit_time:
-                _y = torch.cat((mu0[j], self.time_pt[j][0].reshape((1, 1))), 1)
-            else:
-                _y = mu0[j]
-            
-            _y = mu1[j] #remove later
-            y = odeint(odenet, _y, extrap_time_points_pt   , method=method) + self.init_bias_y #self.time_pt[j][0:]#extrap_time_points_pt # #  
-            y = torch.Tensor.cpu(y)
+            _y = mu0[j] 
+            pathreg_model[1].set_times(extrap_time_points_pt)
+            pred_z = pathreg_model(_y.unsqueeze(1))
+            y = pred_z
             trajectories.append(y)
         return trajectories, all_plotted_samples, extrap_time_points
 
