@@ -304,18 +304,22 @@ if __name__ == "__main__":
     noisy_PPI = PPI
     noisy_prior_mat = prior_mat
     
-    loss_lambda_at_start = 0.99
-    loss_lambda_at_end = 0.99
+    loss_lambda_at_start = 1#0.99
+    loss_lambda_at_end = 1#0.99
     
 
-    masking_start_epoch = 2
-    initial_hit_perc = 0 #0.70
+    masking_start_epoch = 3
+    initial_hit_perc = 0.70
     num_epochs_till_mask = 10
-    prune_perc = 0 #0.10
-    pruning_score_lambda_PPI = 0.05 
-    pruning_score_lambda_motif = 0.01
+    prune_perc = 0.10
+    pruning_score_lambda_PPI = 0#0.05 
+    pruning_score_lambda_motif = 0#0.01
     lr_schedule_patience = 3
+<<<<<<< HEAD
     prop_force_to_zero_for_loaded_model = 0.83
+=======
+    prop_force_to_zero_for_loaded_model = 0
+>>>>>>> b6d7d12c359a922f0134e58b51df0173b371b2a1
     consider_multipliers = True
 
     odenet = ODENet(device, data_handler.dim, explicit_time=settings['explicit_time'], neurons = settings['neurons_per_layer'], 
