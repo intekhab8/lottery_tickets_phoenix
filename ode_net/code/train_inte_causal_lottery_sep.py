@@ -315,7 +315,7 @@ if __name__ == "__main__":
     pruning_score_lambda_PPI = 0.05 
     pruning_score_lambda_motif = 0.01
     lr_schedule_patience = 3
-    prop_force_to_zero_for_loaded_model = 0.92
+    prop_force_to_zero_for_loaded_model = 0.83
     consider_multipliers = True
 
     odenet = ODENet(device, data_handler.dim, explicit_time=settings['explicit_time'], neurons = settings['neurons_per_layer'], 
