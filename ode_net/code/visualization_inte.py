@@ -113,6 +113,12 @@ class Visualizator1D(Visualizator):
                 self.settings['scale_expression']*upper_lim))
          
 
+    def visualize_pathreg(self):
+        self.trajectories, self.all_plotted_samples, self.extrap_timepoints = self.data_handler.calculate_trajectory_pathreg(self.odenet, self.settings['method'], num_val_trajs = self.sample_plot_val_cutoff)
+        self._visualize_trajectories_split()
+        #self._visualize_dynamics()
+        self._set_ax_limits()
+
     def visualize(self):
         self.trajectories, self.all_plotted_samples, self.extrap_timepoints = self.data_handler.calculate_trajectory(self.odenet, self.settings['method'], num_val_trajs = self.sample_plot_val_cutoff)
         self._visualize_trajectories_split()
