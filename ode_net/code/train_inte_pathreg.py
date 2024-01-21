@@ -24,7 +24,7 @@ from datahandler import DataHandler
 from read_config import read_arguments_from_file
 from visualization_inte import *
 
-from pathreg_helper import L0_MLP, initial_position, ODEBlock, PathReg, L1
+from pathreg_helper_PHX import L0_MLP, initial_position, ODEBlock, PathReg, L1
 from matplotlib.ticker import FuncFormatter
 #torch.set_num_threads(16) #CHANGE THIS!
 
@@ -69,14 +69,21 @@ def my_r_squared(output, target):
     my_corr = torch.sum(vx * vy) / (torch.sqrt(torch.sum(vx ** 2)) * torch.sqrt(torch.sum(vy ** 2)))
     return(my_corr**2)
 
-def get_true_val_set_r2(pathreg_model, data_handler, method, batch_type):
+def get_true_val_set_r2(pathreg_model, data_handler, method, batch_type, num_reps = 1):
     data_pw, t_pw, target_pw = data_handler.get_true_mu_set_pairwise(val_only = True, batch_type =  batch_type)
+    
     with torch.no_grad():
         predictions_pw = torch.zeros(data_pw.shape).to(data_handler.device)
         for index, (time, batch_point) in enumerate(zip(t_pw, data_pw)):
             pathreg_model[1].set_times(time)
-            pred_z = pathreg_model(batch_point.unsqueeze(1))
-            predictions_pw[index, :, :] = pred_z[1]
+            temp_preds = torch.empty((num_reps,1, data_handler.dim), device=data_handler.device)
+            # Repeat the prediction operation 100 times
+            for i in range(num_reps):
+                pred_z = pathreg_model(batch_point.unsqueeze(1))
+                temp_preds[i] = pred_z[1]
+            # Calculate the average along the first dimension (axis=0)
+            average_pred_z = torch.mean(temp_preds, dim=0)
+            predictions_pw[index, :, :] = average_pred_z
         var_explained_pw = my_r_squared(predictions_pw, target_pw)
         true_val_mse = torch.mean((predictions_pw - target_pw)**2)
     
@@ -134,7 +141,7 @@ def normalize_values(my_tensor):
 
 
 
-def validation(pathreg_model, data_handler, method, explicit_time):
+def validation(pathreg_model, data_handler, method, explicit_time, num_reps = 1):
     data, t, target_full, n_val = data_handler.get_validation_set()
     if method == "trajectory":
         False
@@ -147,8 +154,17 @@ def validation(pathreg_model, data_handler, method, explicit_time):
         # For now we have to loop through manually, their implementation of odenet can only take fixed time lists.
         for index, (time, batch_point, target_point) in enumerate(zip(t, data, target_full)):
             pathreg_model[1].set_times(time)
-            pred_z = pathreg_model(batch_point.unsqueeze(1))
-            predictions.append(pred_z[1])
+            temp_preds = torch.empty((num_reps,1, data_handler.dim), device=data_handler.device)
+
+            # Repeat the prediction operation 100 times
+            for i in range(num_reps):
+                pred_z = pathreg_model(batch_point.unsqueeze(1))
+                temp_preds[i] = pred_z[1]
+
+            # Calculate the average along the first dimension (axis=0)
+            average_pred_z = torch.mean(temp_preds, dim=0)
+
+            predictions.append(average_pred_z)
             targets.append(target_point) #IH comment
             #predictions[index, :, :] = odeint(odenet, batch_point[0], time, method=method)[1:]
 
@@ -184,7 +200,7 @@ def decrease_lr(opt, verbose, tot_epochs, epoch, lower_lr,  dec_lr_factor ):
         print(dir_string,"learning rate to: %f" % opt.param_groups[0]['lr'])
 
 
-def get_sparsity(model):
+def get_sparsity_OLD(model):
     
     # MODEL SPARSITY
     for i, layer in enumerate(model[1].odefunc.layers):
@@ -196,15 +212,53 @@ def get_sparsity(model):
     
     return model_spar
 
+def average_zeros_across_arrays(*arrays):
+    num_zeros = 0
+    total_elements = 0
+    
+    for array in arrays:
+        num_zeros += np.sum(np.abs(array) ==0)
+        total_elements += array.size
+    
+    if total_elements == 0:
+        return 0  # Avoid division by zero if the total number of elements is zero
+    
+    average_zeros = num_zeros / total_elements
+    return average_zeros
 
-def training_step(pathreg_model, data_handler, opt, method, batch_size, lambda_l1, lambda_pathreg):
+def get_sparsity_new(pathreg_model):
+    Wo_sums = pathreg_model[1].odefunc.output_sums[1].sample_weights().detach().numpy()
+    alpha_comb_sums = pathreg_model[1].odefunc.output_sums[2].sample_weights().detach().numpy()
+    Wo_prods = pathreg_model[1].odefunc.output_prods[1].sample_weights().detach().numpy()
+    alpha_comb_prods = pathreg_model[1].odefunc.output_prods[3].sample_weights().detach().numpy()
+    
+    my_sparsity = average_zeros_across_arrays(Wo_prods, Wo_sums, alpha_comb_prods, alpha_comb_sums)
+    return(my_sparsity)
+
+
+def training_step(pathreg_model, data_handler, opt, method, batch_size, lambda_l1, lambda_pathreg, num_reps = 1):
     batch, t, target = data_handler.get_batch(batch_size)
     opt.zero_grad()
     predictions = torch.zeros(batch.shape).to(data_handler.device)
+    
+    '''
+    my_time = torch.unique(t.view(-1))
+    pathreg_model[1].set_times(my_time)
+    pred_z = pathreg_model(batch[0:1, ])
+    predictions = pred_z[1:, :, :]
+    '''
     for index, (time, batch_point) in enumerate(zip(t, batch)):
         pathreg_model[1].set_times(time)
-        pred_z = pathreg_model(batch_point.unsqueeze(1))
-        predictions[index, :, :] = pred_z[1]
+        temp_preds = torch.empty((num_reps,1, data_handler.dim), device=data_handler.device)
+
+        # Repeat the prediction operation 100 times
+        for i in range(num_reps):
+            pred_z = pathreg_model(batch_point.unsqueeze(1))
+            temp_preds[i] = pred_z[1]
+
+        # Calculate the average along the first dimension (axis=0)
+        average_pred_z = torch.mean(temp_preds, dim=0)
+        predictions[index, :, :] = average_pred_z 
     
     loss_data = torch.mean((predictions - target)**2) 
     path_reg = PathReg(pathreg_model)
@@ -214,7 +268,7 @@ def training_step(pathreg_model, data_handler, opt, method, batch_size, lambda_l
     composed_loss.backward() #MOST EXPENSIVE STEP!
     opt.step()
 
-    model_spar = get_sparsity(pathreg_model)
+    model_spar = get_sparsity_new(pathreg_model)
 
     return [loss_data, model_spar]
 
@@ -297,24 +351,23 @@ if __name__ == "__main__":
     noisy_prior_mat = prior_mat
     
     lr_schedule_patience = 3
-    lambda_l1 =  0 #0.0001 
-    lambda_pathreg = 0.0001
-
+    lambda_l1 =  0#0.001
+    lambda_pathreg = 0#0.0001
+    num_reps = 1
 
     
     #X0 = _initial_cond(data,args['ntimestamps'])
     #tX,tT,tX0 = array_tensor(data,time,X0)
 
 
-    nhidden = 100
+    nhidden = 40
     data_dim = data_handler.dim
-    print(data_dim)
     feature_layers = [initial_position(data_dim, nhidden), 
                     ODEBlock(
-                        L0_MLP(input_dim=data_dim, layer_dims=(nhidden,nhidden,data_dim), temperature = 10), #, N=150
-                        data_dim, 
-                        1e-3,
-                        settings['method']
+                        odefunc = L0_MLP(input_dim=data_dim, layer_dims=(nhidden,nhidden,data_dim), temperature = 0.02, my_lambda = 1), #, N=150
+                        dim = data_dim, 
+                        tol = 1e-3,
+                        method = settings['method']
                     )]
     pathreg_model = nn.Sequential(*feature_layers).to(device)
     loss_func = nn.MSELoss()
@@ -326,11 +379,13 @@ if __name__ == "__main__":
                                                      threshold_mode='abs', cooldown=0, min_lr=4e-05, eps=1e-09, verbose=True)
     
 
+    
     with open('{}/network.txt'.format(output_root_dir), 'w') as net_file:
         print(pathreg_model, file = net_file)
         print(".......", file = net_file)
         print("lambda_l1 = {}".format(lambda_l1), file = net_file)
         print("lambda_pathreg = {}".format(lambda_pathreg), file = net_file)
+        print("num Monte Carlo reps = {}".format(num_reps), file = net_file)
         
     # Init plot
     if settings['viz']:
@@ -408,7 +463,7 @@ if __name__ == "__main__":
         while not data_handler.epoch_done:
             start_batch_time = perf_counter()
             
-            loss_list = training_step(pathreg_model, data_handler, opt, settings['method'], settings['batch_size'], lambda_l1, lambda_pathreg)
+            loss_list = training_step(pathreg_model, data_handler, opt, settings['method'], settings['batch_size'], lambda_l1, lambda_pathreg, num_reps)
             loss = loss_list[0]
             prior_loss = loss_list[1]
             #batch_times.append(perf_counter() - start_batch_time)
@@ -430,7 +485,7 @@ if __name__ == "__main__":
         prior_losses.append(this_epoch_total_prior_loss/iterations_in_epoch)
         #print("Overall training loss {:.5E}".format(train_loss))
 
-        mu_loss = get_true_val_set_r2(pathreg_model, data_handler, settings['method'], settings['batch_type'])
+        mu_loss = get_true_val_set_r2(pathreg_model, data_handler, settings['method'], settings['batch_type'], num_reps)
         #mu_loss = true_loss(odenet, data_handler, settings['method'])
         true_mean_losses.append(mu_loss[1])
         true_mean_losses_init_val_based.append(mu_loss[0])
@@ -452,7 +507,7 @@ if __name__ == "__main__":
         #handle true-mu loss
        
         if data_handler.n_val > 0:
-            val_loss_list = validation(pathreg_model, data_handler, settings['method'], settings['explicit_time'])
+            val_loss_list = validation(pathreg_model, data_handler, settings['method'], settings['explicit_time'], num_reps)
             val_loss = val_loss_list[0]
             validation_loss.append(val_loss)
             if epoch == 1:
@@ -461,6 +516,7 @@ if __name__ == "__main__":
                 print('Model improved, saving current model')
                 best_vaL_model_so_far = pathreg_model
                 save_model(pathreg_model, opt, epoch, output_root_dir, 'best_val_model')
+                
             else:
                 if val_loss < min_val_loss:
                     consec_epochs_failed = 0

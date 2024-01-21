@@ -52,17 +52,17 @@ with torch.no_grad():
     # Check if Wo_prods and alpha_comb_prods exist
     if hasattr(pathreg_model[1].odefunc, 'output_prods'):
         print("prods model present!")
-        Wo_sums = pathreg_model[1].odefunc.output_sums[1].sample_weights().detach().numpy()
-        alpha_comb_sums = pathreg_model[1].odefunc.output_sums[2].sample_weights().detach().numpy()
+        Wo_sums = pathreg_model[1].odefunc.output_sums[1].weights.detach().numpy()
+        alpha_comb_sums = pathreg_model[1].odefunc.output_sums[2].weights.detach().numpy()
         Bo_sums = np.transpose(pathreg_model[1].odefunc.output_sums[1].bias.detach().numpy())
-        Wo_prods = pathreg_model[1].odefunc.output_prods[1].sample_weights().detach().numpy()
-        alpha_comb_prods = pathreg_model[1].odefunc.output_prods[3].sample_weights().detach().numpy()
+        Wo_prods = pathreg_model[1].odefunc.output_prods[1].weights.detach().numpy()
+        alpha_comb_prods = pathreg_model[1].odefunc.output_prods[3].weights.detach().numpy()
         Bo_prods = np.transpose(pathreg_model[1].odefunc.output_prods[1].bias.detach().numpy())
         effects_mat = np.matmul(Wo_sums, alpha_comb_sums) + np.matmul(Wo_prods, alpha_comb_prods)
 
     else:
-        Wo_sums = pathreg_model[1].odefunc.output[1].sample_weights().detach().numpy()
-        alpha_comb_sums = pathreg_model[1].odefunc.output[2].sample_weights().detach().numpy()
+        Wo_sums = pathreg_model[1].odefunc.output[1].weights.detach().numpy()
+        alpha_comb_sums = pathreg_model[1].odefunc.output[2].weights.detach().numpy()
         #Bo_sums = np.transpose(sums_model.linear_out.bias.detach().numpy())
         effects_mat = np.matmul(Wo_sums,alpha_comb_sums) 
 
@@ -95,7 +95,7 @@ np.savetxt("/home/ubuntu/lottery_tickets_phoenix/ode_net/code/model_inspect/gene
 '''
 with torch.no_grad():
     for i, layer in enumerate(pathreg_model[1].odefunc.layers):
-        samp_weights = layer.sample_weights()
+        samp_weights = layer.weights
         if i ==0:
             all_weights = samp_weights.flatten()
             WM = samp_weights

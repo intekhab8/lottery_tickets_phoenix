@@ -309,7 +309,6 @@ class DataHandler:
             extrap_time_points_pt = torch.from_numpy(extrap_time_points)
             trajectories = []
             mu0 = self.get_mu0()
-            mu1 = self.get_mu1() #remove later
             if self.val_split == 1:
                 if fixed_traj_idx is None:
                     all_plotted_samples = sorted(np.random.choice(self.val_set_indx, num_val_trajs, replace=False))
@@ -347,7 +346,6 @@ class DataHandler:
         extrap_time_points_pt = torch.from_numpy(extrap_time_points)
         trajectories = []
         mu0 = self.get_mu0()
-        mu1 = self.get_mu1() #remove later
         if self.val_split == 1:
             if fixed_traj_idx is None:
                 all_plotted_samples = sorted(np.random.choice(self.val_set_indx, num_val_trajs, replace=False))
@@ -368,8 +366,13 @@ class DataHandler:
         for j in all_plotted_samples:
             _y = mu0[j] 
             pathreg_model[1].set_times(extrap_time_points_pt)
-            pred_z = pathreg_model(_y.unsqueeze(1))
-            y = pred_z
+            num_reps = 7
+            temp_preds = torch.empty((num_reps,len(extrap_time_points), 1, self.dim), device="cpu")
+            for i in range(num_reps):
+                pred_z = pathreg_model(_y.unsqueeze(1))
+                temp_preds[i] = pred_z
+            
+            y = torch.mean(temp_preds, dim=0)
             trajectories.append(y)
         return trajectories, all_plotted_samples, extrap_time_points
 

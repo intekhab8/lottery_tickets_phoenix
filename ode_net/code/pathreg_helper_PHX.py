@@ -14,7 +14,7 @@ import sys
 import os
 sys.path.append('')
 from L0_regularization.l0_layers import L0Dense
-
+from torch.nn.parameter import Parameter
 
 from torchdiffeq import odeint
 
@@ -120,30 +120,66 @@ try:
 except FileExistsError:
     pass    
 
+class SoftsignMod(nn.Module):
+    def __init__(self):
+        super().__init__() # init the base class
+        #self.shift = shift
+
+    def forward(self, input):
+        shift = 0.5
+        shifted_input =(input- shift) #500*
+        abs_shifted_input = torch.abs(shifted_input)
+        return(shifted_input/(1+abs_shifted_input))   #1/500*
+    
+
+class LogShiftedSoftSignMod(nn.Module):
+    def __init__(self):
+        super().__init__() # init the base class
+
+    def forward(self, input):
+        shift = 0.5
+        shifted_input =  input - shift
+        abs_shifted_input = torch.abs(shifted_input)
+        soft_sign_mod = shifted_input/(1+abs_shifted_input)
+        return(torch.log1p(soft_sign_mod))      
+    
+class ExponentialLayer(nn.Module):
+    def forward(self, x):
+        return torch.exp(x)    
+    
 
 class L0_MLP(nn.Module):
     def __init__(self, input_dim, layer_dims=(100, 100), N=50000, beta_ema=0.999,
-                 weight_decay=0., lambas=(1., 1., 1.), local_rep=False, temperature=2./3.):
+                 weight_decay=0., my_lambda = 1, local_rep=False, temperature=2./3.):
         super(L0_MLP, self).__init__()
         self.layer_dims = layer_dims
         self.input_dim = input_dim
         self.N = N
         self.beta_ema = beta_ema
         self.weight_decay = self.N * weight_decay
-        self.lambas = lambas
+        self.lambdas = my_lambda
 
-        layers = []
-        for i, dimh in enumerate(self.layer_dims):
-            inp_dim = self.input_dim if i == 0 else self.layer_dims[i - 1]
-            droprate_init, lamba = 0.2 if i == 0 else 0.5, lambas[i] if len(lambas) > 1 else lambas[0]
-            if i<len(self.layer_dims)-2:
-                layers += [L0Dense(inp_dim, dimh, droprate_init=droprate_init, weight_decay=self.weight_decay,
-                               lamba=lamba, local_rep=local_rep, temperature=temperature)]
-                layers += [nn.ELU(alpha=1, inplace=False)]
-            else:
-                layers += [L0Dense(inp_dim, dimh, droprate_init=droprate_init, weight_decay=self.weight_decay,
-                               lamba=lamba, local_rep=local_rep, temperature=temperature)]
-        self.output = nn.Sequential(*layers)
+
+        layers_sums = []
+        layers_sums += [SoftsignMod()]
+        layers_sums+= [L0Dense(input_dim, layer_dims[0], droprate_init=0.2, weight_decay=self.weight_decay,
+                               lamba=my_lambda, local_rep=local_rep, temperature=temperature, bias = True)]
+        layers_sums+= [L0Dense(layer_dims[0], input_dim, droprate_init=0.5, weight_decay=self.weight_decay,
+                               lamba=my_lambda, local_rep=local_rep, temperature=temperature, bias = False)]
+
+        self.output_sums = nn.Sequential(*layers_sums)
+        
+        layers_prods = []
+        layers_prods += [LogShiftedSoftSignMod()]
+        layers_prods+= [L0Dense(input_dim, layer_dims[0], droprate_init=0.2, weight_decay=self.weight_decay,
+                               lamba=my_lambda, local_rep=local_rep, temperature=temperature,  bias = True)]
+        layers_prods += [ExponentialLayer()]
+        layers_prods+= [L0Dense(layer_dims[0], input_dim, droprate_init=0.5, weight_decay=self.weight_decay,
+                               lamba=my_lambda, local_rep=local_rep, temperature=temperature,  bias = False)]
+
+        self.output_prods = nn.Sequential(*layers_prods)
+
+        self.gene_multipliers = Parameter(torch.rand(1,input_dim), requires_grad= True)
 
         self.layers = []
         for m in self.modules():
@@ -163,7 +199,8 @@ class L0_MLP(nn.Module):
        
     def forward(self, t, x):  
         self.nfe += 1
-        return self.output(x) - x #added minus x
+        joint = self.output_prods(x) + self.output_sums(x)
+        return torch.relu(self.gene_multipliers)* (joint - x) #added minus x
     
     def regularization(self):
         regularization = 0.
@@ -199,21 +236,27 @@ class L0_MLP(nn.Module):
         return params
     
 
-def PathReg(model):
-    for i, layer in enumerate(model[1].odefunc.layers):
-        if i ==0:
-            WM = torch.abs(layer.sample_weights_ones())
-        else:
-            WM = torch.matmul(WM,torch.abs(layer.sample_weights_ones()))
-    return torch.mean(torch.abs(WM))
+def PathReg(pathreg_model):
+    Wo_sums = pathreg_model[1].odefunc.output_sums[1].sample_weights_ones()
+    alpha_comb_sums = pathreg_model[1].odefunc.output_sums[2].sample_weights_ones()
+    Wo_prods = pathreg_model[1].odefunc.output_prods[1].sample_weights_ones()
+    alpha_comb_prods = pathreg_model[1].odefunc.output_prods[3].sample_weights_ones()
+    
+    WM_sums = torch.matmul(torch.abs(Wo_sums), torch.abs(alpha_comb_sums))
+    WM_prods = torch.matmul(torch.abs(Wo_prods), torch.abs(alpha_comb_prods))
+    
+    return torch.mean(torch.abs(WM_sums) + torch.abs(WM_prods))
 
-def L1(model):
-    for i, layer in enumerate(model[1].odefunc.layers):
-        if i ==0:
-            WM = torch.abs(layer.weights)
-        else:
-            WM = torch.matmul(WM,torch.abs(layer.weights))
-    return torch.mean(torch.abs(WM))
+def L1(pathreg_model):
+    Wo_sums = pathreg_model[1].odefunc.output_sums[1].weights
+    alpha_comb_sums = pathreg_model[1].odefunc.output_sums[2].weights
+    Wo_prods = pathreg_model[1].odefunc.output_prods[1].weights
+    alpha_comb_prods = pathreg_model[1].odefunc.output_prods[3].weights
+    
+    WM_sums = torch.matmul(torch.abs(Wo_sums), torch.abs(alpha_comb_sums))
+    WM_prods = torch.matmul(torch.abs(Wo_prods), torch.abs(alpha_comb_prods))
+    
+    return torch.mean(torch.abs(WM_sums) + torch.abs(WM_prods))
 
 
 
