@@ -107,20 +107,22 @@ def random_multiply(mat_torch):
   return out_torch
 
 
-def read_prior_matrix(prior_mat_file_loc, sparse = False, num_genes = 11165, randomize = False):
+def read_prior_matrix(prior_mat_file_loc, sparse = False, num_genes = 11165, absolute = False):
     if sparse == False: 
         mat = np.genfromtxt(prior_mat_file_loc,delimiter=',')
         mat_torch = torch.from_numpy(mat)
         mat_torch = mat_torch.float()
-        if randomize:
-            print("I AM RANDOMLY FLIPPING EDGE SIGNS!")
-            mat_torch = random_multiply(mat_torch)
-        return mat_torch
+        if absolute:
+            print("I AM SWITCHING ALL EDGE SIGNS to POSITIVE!")
+            mat_torch = torch.abs(mat_torch)
     else: #when scaling up >10000
         mat = np.genfromtxt(prior_mat_file_loc,delimiter=',')
         sparse_mat = torch.sparse_coo_tensor([mat[:,0].astype(int)-1, mat[:,1].astype(int)-1], mat[:,2], ( num_genes,  num_genes))
         mat_torch = sparse_mat.to_dense().float()
-        return(mat_torch)
+        if absolute:
+            print("I AM SWITCHING ALL EDGE SIGNS to POSITIVE!")
+            mat_torch = torch.abs(mat_torch)
+    return(mat_torch)
 
 def normalize_values(my_tensor):
   """Normalizes the values of a PyTorch tensor.
@@ -215,7 +217,7 @@ def reset_lr(opt, verbose, old_lr):
 
 def setOptimizerLRScheduler(patience):
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(opt, mode='min', 
-                                                     factor=0.9, patience=patience, threshold=1e-07, 
+                                                     factor=0.9, patience=patience, threshold=1e-09, 
                                                      threshold_mode='abs', cooldown=0, min_lr=4e-05, eps=1e-09, verbose=True)
     return scheduler
 
@@ -318,28 +320,31 @@ if __name__ == "__main__":
     
     #Read in the prior matrix
     prior_mat_loc = '/home/ubuntu/lottery_tickets_phoenix/breast_cancer_data/clean_data/edge_prior_matrix_desmedt_11165.csv'
-    prior_mat = read_prior_matrix(prior_mat_loc, sparse = True, num_genes = data_handler.dim, randomize= False)
-    PPI_mat_loc = '/home/ubuntu/lottery_tickets_phoenix/breast_cancer_data/clean_data/PPI_matrix_desmedt_11165.csv'
-    PPI = read_prior_matrix(PPI_mat_loc, sparse = True, num_genes = data_handler.dim, randomize= False)
-    PPI =  PPI / torch.sum(PPI)
+    absolute_flag = True
+    prior_mat = read_prior_matrix(prior_mat_loc, sparse = True, num_genes = data_handler.dim, absolute = absolute_flag)
+    
     batch_for_prior = (torch.rand(10000,1,prior_mat.shape[0], device = data_handler.device) - 0.5)
     prior_grad = torch.matmul(batch_for_prior,prior_mat) #can be any model here that predicts the derivative
+    PPI_mat_loc = '/home/ubuntu/lottery_tickets_phoenix/breast_cancer_data/clean_data/PPI_matrix_desmedt_11165.csv'
+    PPI = read_prior_matrix(PPI_mat_loc, sparse = True, num_genes = data_handler.dim)
+    PPI =  PPI / torch.sum(PPI)
         
     noisy_PPI = PPI
     noisy_prior_mat = prior_mat
     
     loss_lambda_at_start = 1
-    loss_lambda_at_end =  1#0.999
+    loss_lambda_at_end =  0.999
     
 
-    masking_start_epoch = 5
-    initial_hit_perc = 0.80
-    num_epochs_till_mask = 40
-    prune_perc = 0.20
-    pruning_score_lambda_PPI =  0.9995
-    pruning_score_lambda_motif = 0.9995
-    lr_schedule_patience = 3
+    masking_start_epoch = 10
+    initial_hit_perc = 0.90
+    num_epochs_till_mask = 20
+    prune_perc = 0.10
+    pruning_score_lambda_PPI = 0.9995
+    pruning_score_lambda_motif = 0.995
+    lr_schedule_patience = 2
     prop_force_to_zero_for_loaded_model = 0
+    consider_multipliers = True
 
     odenet = ODENet(device, data_handler.dim, explicit_time=settings['explicit_time'], neurons = settings['neurons_per_layer'], 
                     log_scale = settings['log_scale'], init_bias_y = settings['init_bias_y'])
@@ -384,25 +389,42 @@ if __name__ == "__main__":
         net_file.write(odenet.__str__())
         net_file.write('\n\n\n')
         net_file.write(inspect.getsource(ODENet.forward))
+        if absolute_flag:
+            net_file.write('\n')
+            net_file.write("I AM SWITCHING ALL EDGE SIGNS to POSITIVE!")
         net_file.write('\n')
         net_file.write('lambda at start (first 5 epochs) = {}'.format(loss_lambda_at_start))
         net_file.write('\n')
         net_file.write('and then lambda = {}'.format(loss_lambda_at_end))
         net_file.write('\n')
-        net_file.write('causal lottery!')
-        net_file.write('\n')
-        net_file.write('doing PPI mask + T mask')
-        net_file.write('\n')
-        net_file.write('pruning score lambda (PPI, Motif) = ({}, {})'.format(pruning_score_lambda_PPI, pruning_score_lambda_motif))
-        net_file.write('\n')
-        net_file.write('Initial hit = {} at epoch {}, then prune {} every {} epochs'.format(initial_hit_perc, masking_start_epoch, prune_perc, num_epochs_till_mask))
+        if prune_perc > 0 or initial_hit_perc > 0:
+            net_file.write('causal lottery!')
+            net_file.write('\n')
+            net_file.write('doing PPI mask + T mask')
+            if consider_multipliers: 
+                net_file.write('\n')
+                net_file.write('.....')
+                net_file.write('Considering multipliers for final layer pruning')   
+                net_file.write('.....')
+            net_file.write('\n')
+            net_file.write('pruning score lambda (PPI, Motif) = ({}, {})'.format(pruning_score_lambda_PPI, pruning_score_lambda_motif))
+            net_file.write('\n')
+            net_file.write('Initial hit = {} at epoch {}, then prune {} every {} epochs'.format(initial_hit_perc, masking_start_epoch, prune_perc, num_epochs_till_mask))
+        else:
+            net_file.write('No pruning!')
+            net_file.write('\n')
         if settings['pretrained_model']:
             net_file.write('\n')
             net_file.write('LOADED in a pre-trained model but forced lowest {} perc of params to zero'.format(prop_force_to_zero_for_loaded_model*100))
+            if consider_multipliers: 
+                net_file.write('\n')
+                net_file.write('.....')
+                net_file.write('Considering multipliers for forced zeroing of pre-trained model')   
+                net_file.write('.....')
     
     # Init plot
     if settings['viz']:
-        visualizer = Visualizator1D(data_handler, odenet, settings)
+        visualizer = Visualizator1D(data_handler, odenet, settings, my_range_tuple = (0,1) )
 
     # Training loop
     #batch_times = [] 
@@ -450,7 +472,18 @@ if __name__ == "__main__":
         total_params = 0
         for name, module in odenet.named_modules():
             if isinstance(module, torch.nn.Linear):
-                prune.l1_unstructured(module, name='weight', amount = prop_force_to_zero_for_loaded_model) #, importance_scores = this_loaded_module_prune_score
+                if name in ['net_alpha_combine_sums.linear_out' , 'net_alpha_combine_prods.linear_out']:
+                    if consider_multipliers:
+                        print("Considering multipliers for zeroing of final layers")
+                        current_NN_weights_abs = abs(module.weight.detach())
+                        current_gene_mult_ReLU = torch.relu(odenet.gene_multipliers.detach().t())
+                        this_loaded_module_prune_score = current_NN_weights_abs * current_gene_mult_ReLU
+                        prune.l1_unstructured(module, name='weight', amount = prop_force_to_zero_for_loaded_model, importance_scores = this_loaded_module_prune_score) #CHANGE THIS!
+                    else:
+                        prune.l1_unstructured(module, name='weight', amount = prop_force_to_zero_for_loaded_model)        
+                else:
+                    prune.l1_unstructured(module, name='weight', amount = prop_force_to_zero_for_loaded_model) 
+                
                 print("SETTING LOWEST {} % OF ELEMENTS in {} TO ZERO".format(prop_force_to_zero_for_loaded_model*100, name))
                 total_params += module.weight.nelement()
                 total_pruned += torch.sum(module.weight == 0)
@@ -489,7 +522,7 @@ if __name__ == "__main__":
             for name, module in odenet.named_modules():
                 if isinstance(module, torch.nn.Linear): # and (prune_perc > 0 or initial_hit_perc > 0)
                     #current_NN_weights = module.weight.detach()
-                    if name in ['net_sums.linear_out','net_alpha_combine_sums.linear_out','net_alpha_combine_prods.linear_out' ]: 
+                    if name == 'net_sums.linear_out': 
                         current_NN_weights_abs = abs(module.weight.detach()) #GRAD!.detach()
                         current_NN_weights_abs = current_NN_weights_abs/torch.sum(current_NN_weights_abs) #trying normalization this for PPI layers+
                         
@@ -498,6 +531,12 @@ if __name__ == "__main__":
                         current_NN_weights_abs = torch.exp(module.weight.detach()) #GRAD! 
                         current_NN_weights_abs = current_NN_weights_abs/torch.sum(current_NN_weights_abs) #trying normalization this for PPI layers
 
+                    elif name in ['net_alpha_combine_sums.linear_out','net_alpha_combine_prods.linear_out' ]: 
+                        current_NN_weights_abs = abs(module.weight.detach()) #GRAD!.detach()
+                        if consider_multipliers:
+                            current_gene_mult_ReLU = torch.relu(odenet.gene_multipliers.detach().t())
+                            current_NN_weights_abs = current_NN_weights_abs * current_gene_mult_ReLU
+                        current_NN_weights_abs = current_NN_weights_abs/torch.sum(current_NN_weights_abs) #trying normalization this for PPI layers+
                     
                     if name in ['net_sums.linear_out','net_prods.linear_out'] and ((epoch == masking_start_epoch) or epoch % num_epochs_till_mask == 0): #name == 'net_prods.linear_out' or 
                         
@@ -505,9 +544,8 @@ if __name__ == "__main__":
                         S_S_transpose_inv = torch.inverse(torch.matmul(mask_curr, torch.transpose(mask_curr,0,1)))
                         S_PPI = torch.matmul(mask_curr, noisy_PPI)
                         S_mask_best_guess = torch.matmul(S_S_transpose_inv, S_PPI)
-                        abs_norm_S_mask_best_guess = torch.abs(S_mask_best_guess)/torch.sum(torch.abs(S_mask_best_guess))
-
-                        updated_score = pruning_score_lambda_PPI * abs_norm_S_mask_best_guess + (1 - pruning_score_lambda_PPI) * current_NN_weights_abs
+                        
+                        updated_score = pruning_score_lambda_PPI * torch.abs(S_mask_best_guess) + (1 - pruning_score_lambda_PPI) * current_NN_weights_abs
                         
                         prune.l1_unstructured(module, name='weight', amount=prune_this_epoch, importance_scores = updated_score)
                         my_current_custom_pruning_scores[name] = updated_score
@@ -522,9 +560,9 @@ if __name__ == "__main__":
                         T_tranpose_S_transpose = torch.transpose(torch.matmul(incoming_mask_curr,abs(noisy_prior_mat)),0,1)
                         S_S_transpose_inv = torch.inverse(torch.matmul(incoming_mask_curr, torch.transpose(incoming_mask_curr,0,1)))
                         C_mask_best_guess = torch.matmul(T_tranpose_S_transpose, S_S_transpose_inv)
-                        abs_norm_C_mask_best_guess = torch.abs(C_mask_best_guess)/torch.sum(torch.abs(C_mask_best_guess))
+
                         
-                        updated_score = pruning_score_lambda_motif * abs_norm_C_mask_best_guess  + (1 - pruning_score_lambda_motif) * current_NN_weights_abs
+                        updated_score = pruning_score_lambda_motif * torch.abs(C_mask_best_guess)  + (1 - pruning_score_lambda_motif) * current_NN_weights_abs
                         
                         #updated_score = mask_T.contiguous()
                         
@@ -543,6 +581,7 @@ if __name__ == "__main__":
                 reset_lr(opt, True, settings['init_lr']) #, 
                 scheduler = setOptimizerLRScheduler(patience = lr_schedule_patience)
 
+
             
         start_epoch_time = perf_counter()
         iteration_counter = 1
@@ -551,7 +590,7 @@ if __name__ == "__main__":
         this_epoch_total_train_loss = 0
         this_epoch_total_prior_loss = 0
         
-        if epoch <= 3:
+        if epoch <= 5:
             loss_lambda = loss_lambda_at_start
         else:
             loss_lambda = loss_lambda_at_end    
