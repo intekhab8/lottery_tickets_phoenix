@@ -291,7 +291,7 @@ if __name__ == "__main__":
     
     #Read in the prior matrix
     prior_mat_loc = '/home/ubuntu/lottery_tickets_phoenix/ground_truth_simulator/clean_data/edge_prior_matrix_chalmers_350_noise_{}.csv'.format(settings['noise'])
-    absolute_flag = True
+    absolute_flag = False
     prior_mat = read_prior_matrix(prior_mat_loc, sparse = False, num_genes = data_handler.dim, absolute = absolute_flag)
 
     batch_for_prior = (torch.rand(10000,1,prior_mat.shape[0], device = data_handler.device) - 0.5)
@@ -315,15 +315,7 @@ if __name__ == "__main__":
     pruning_score_lambda_PPI = 0.05 
     pruning_score_lambda_motif = 0.01
     lr_schedule_patience = 3
-<<<<<<< HEAD
-    prop_force_to_zero_for_loaded_model = 0.75
-=======
-<<<<<<< HEAD
-    prop_force_to_zero_for_loaded_model = 0.83
-=======
     prop_force_to_zero_for_loaded_model = 0
->>>>>>> b6d7d12c359a922f0134e58b51df0173b371b2a1
->>>>>>> 2861641c62d018dcb03c8cd3288d96505914786f
     consider_multipliers = True
 
     odenet = ODENet(device, data_handler.dim, explicit_time=settings['explicit_time'], neurons = settings['neurons_per_layer'], 

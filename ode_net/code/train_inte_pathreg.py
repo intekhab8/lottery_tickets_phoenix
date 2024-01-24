@@ -351,8 +351,8 @@ if __name__ == "__main__":
     noisy_prior_mat = prior_mat
     
     lr_schedule_patience = 3
-    lambda_l1 =  0#0.001
-    lambda_pathreg = 0#0.0001
+    lambda_l1 =  0.001
+    lambda_pathreg = 0.0001
     num_reps = 1
 
     
@@ -364,7 +364,7 @@ if __name__ == "__main__":
     data_dim = data_handler.dim
     feature_layers = [initial_position(data_dim, nhidden), 
                     ODEBlock(
-                        odefunc = L0_MLP(input_dim=data_dim, layer_dims=(nhidden,nhidden,data_dim), temperature = 0.02, my_lambda = 1), #, N=150
+                        odefunc = L0_MLP(input_dim=data_dim, layer_dims=(nhidden,nhidden,data_dim), temperature = 2/3, my_lambda = 1), #, N=150
                         dim = data_dim, 
                         tol = 1e-3,
                         method = settings['method']
