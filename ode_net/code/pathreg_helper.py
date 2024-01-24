@@ -163,7 +163,7 @@ class L0_MLP(nn.Module):
        
     def forward(self, t, x):  
         self.nfe += 1
-        return self.output(x) #- x #added minus x
+        return self.output(x) - x #added minus x
     
     def regularization(self):
         regularization = 0.
