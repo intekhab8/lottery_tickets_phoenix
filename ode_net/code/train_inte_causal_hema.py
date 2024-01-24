@@ -26,6 +26,33 @@ from visualization_inte import *
 
 #torch.set_num_threads(16) #CHANGE THIS!
 
+def plot_MSE_new(epoch_so_far, training_loss, validation_loss, true_mean_losses, true_mean_losses_init_val_based, prior_losses, img_save_dir):
+    
+    # Create two subplots, one for the main MSE loss plot and one for the prior loss plot.
+    fig, (ax1, ax2) = plt.subplots(1, 2, sharey=False)
+    fig.set_size_inches(12, 6)
+
+    ax1.plot(range(1, epoch_so_far + 1), training_loss, color="blue", label="Training loss")
+    if len(validation_loss) > 0:
+        ax1.plot(range(1, epoch_so_far + 1), validation_loss, color="red", label="Validation loss")
+
+    ax2.plot(range(1, epoch_so_far + 1), prior_losses, color="magenta", label="Prior loss")
+
+    ax1.set_yscale('log')
+    ax1.set_xlabel("Epoch")
+    ax1.set_ylabel("Error (MSE)")
+    ax1.legend(loc='upper right')
+
+    ax2.set_yscale('log')
+    ax2.set_xlabel("Epoch")
+    ax2.set_ylabel("Error (MSE)")
+    ax2.set_title("Prior Loss")
+
+    #plt.subplots_adjust(wspace=0.3)
+    fig.tight_layout()
+    plt.savefig("{}/MSE_loss.png".format(img_save_dir))
+    np.savetxt('{}full_loss_info.csv'.format(output_root_dir), np.c_[training_loss, validation_loss, true_mean_losses, true_mean_losses_init_val_based], delimiter=',')
+
 def plot_MSE(epoch_so_far, training_loss, validation_loss, true_mean_losses, true_mean_losses_init_val_based, prior_losses ,img_save_dir):
     plt.figure()
     plt.plot(range(1, epoch_so_far + 1), training_loss, color = "blue", label = "Training loss")
@@ -88,12 +115,14 @@ def read_prior_matrix(prior_mat_file_loc, sparse = False, num_genes = 11165, abs
         if absolute:
             print("I AM SWITCHING ALL EDGE SIGNS to POSITIVE!")
             mat_torch = torch.abs(mat_torch)
-        return mat_torch
     else: #when scaling up >10000
         mat = np.genfromtxt(prior_mat_file_loc,delimiter=',')
         sparse_mat = torch.sparse_coo_tensor([mat[:,0].astype(int)-1, mat[:,1].astype(int)-1], mat[:,2], ( num_genes,  num_genes))
         mat_torch = sparse_mat.to_dense().float()
-        return(mat_torch)
+        if absolute:
+            print("I AM SWITCHING ALL EDGE SIGNS to POSITIVE!")
+            mat_torch = torch.abs(mat_torch)
+    return(mat_torch)
 
 def normalize_values(my_tensor):
   """Normalizes the values of a PyTorch tensor.
@@ -120,9 +149,6 @@ def normalize_values(my_tensor):
 
 def validation(odenet, data_handler, method, explicit_time):
     data, t, target_full, n_val = data_handler.get_validation_set()
-    if method == "trajectory":
-        False
-
     init_bias_y = data_handler.init_bias_y
     #odenet.eval()
     with torch.no_grad():
@@ -132,11 +158,11 @@ def validation(odenet, data_handler, method, explicit_time):
         for index, (time, batch_point, target_point) in enumerate(zip(t, data, target_full)):
             #IH: 9/10/2021 - added these to handle unequal time availability 
             #comment these out when not requiring nan-value checking
-            #not_nan_idx = [i for i in range(len(time)) if not torch.isnan(time[i])]
-            #time = time[not_nan_idx]
-            #not_nan_idx.pop()
-            #batch_point = batch_point[not_nan_idx]
-            #target_point = target_point[not_nan_idx]
+            not_nan_idx = [i for i in range(len(time)) if not torch.isnan(time[i])]
+            time = time[not_nan_idx]
+            not_nan_idx.pop()
+            batch_point = batch_point[not_nan_idx]
+            target_point = target_point[not_nan_idx]
             
             # Do prediction
             predictions.append(odeint(odenet, batch_point, time, method=method)[1])
@@ -188,7 +214,7 @@ def reset_lr(opt, verbose, old_lr):
 
 def setOptimizerLRScheduler(patience):
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(opt, mode='min', 
-                                                     factor=0.9, patience=patience, threshold=1e-06, 
+                                                     factor=0.9, patience=patience, threshold=1e-09, 
                                                      threshold_mode='abs', cooldown=0, min_lr=4e-05, eps=1e-09, verbose=True)
     return scheduler
 
@@ -231,9 +257,9 @@ def save_model(odenet, folder, filename):
     odenet.save('{}{}.pt'.format(folder, filename))
 
 parser = argparse.ArgumentParser('Testing')
-parser.add_argument('--settings', type=str, default='config_inte.cfg')
-clean_name =  "chalmers_350genes_150samples_earlyT_0bimod_1initvar" 
-parser.add_argument('--data', type=str, default='/home/ubuntu/lottery_tickets_phoenix/ground_truth_simulator/clean_data/{}.csv'.format(clean_name))
+parser.add_argument('--settings', type=str, default='config_hema.cfg')
+clean_name =  "hemaS1D2_529genes_3samples" 
+parser.add_argument('--data', type=str, default='/home/ubuntu/lottery_tickets_phoenix/hema_data/clean_data/{}.csv'.format(clean_name))
 
 args = parser.parse_args()
 
@@ -290,33 +316,31 @@ if __name__ == "__main__":
                                         init_bias_y = settings['init_bias_y'])
     
     #Read in the prior matrix
-    prior_mat_loc = '/home/ubuntu/lottery_tickets_phoenix/ground_truth_simulator/clean_data/edge_prior_matrix_chalmers_350_noise_{}.csv'.format(settings['noise'])
-    absolute_flag = False
+    prior_mat_loc = '/home/ubuntu/lottery_tickets_phoenix/hema_data/clean_data/edge_prior_matrix_hema_529.csv'
+    absolute_flag = True
     prior_mat = read_prior_matrix(prior_mat_loc, sparse = False, num_genes = data_handler.dim, absolute = absolute_flag)
-
+    
+    PPI_mat_loc = '/home/ubuntu/lottery_tickets_phoenix/hema_data/clean_data/edge_prior_matrix_hema_529.csv' #change soon
+    PPI = read_prior_matrix(PPI_mat_loc, sparse = False, num_genes = data_handler.dim)
+    PPI =  PPI / torch.sum(PPI)
     batch_for_prior = (torch.rand(10000,1,prior_mat.shape[0], device = data_handler.device) - 0.5)
     prior_grad = torch.matmul(batch_for_prior,prior_mat) #can be any model here that predicts the derivative
-    PPI = torch.matmul(torch.abs(prior_mat), torch.transpose(torch.abs(prior_mat), 0, 1)) 
-    PPI =  PPI / torch.sum(PPI) #normalize PPI
-    
-
-
+        
     noisy_PPI = PPI
     noisy_prior_mat = prior_mat
     
-    loss_lambda_at_start = 0.99
-    loss_lambda_at_end = 0.99
+    loss_lambda_at_start = 1
+    loss_lambda_at_end =  1#0.999
     
 
     masking_start_epoch = 3
-    initial_hit_perc = 0#0.70
+    initial_hit_perc = 0.70
     num_epochs_till_mask = 10
-    prune_perc = 0 #0.10
-    pruning_score_lambda_PPI = 0.05 
-    pruning_score_lambda_motif = 0.01
+    prune_perc = 0.10
+    pruning_score_lambda_PPI =  0#0.9995
+    pruning_score_lambda_motif = 0#0.9995
     lr_schedule_patience = 3
     prop_force_to_zero_for_loaded_model = 0
-    consider_multipliers = True
 
     odenet = ODENet(device, data_handler.dim, explicit_time=settings['explicit_time'], neurons = settings['neurons_per_layer'], 
                     log_scale = settings['log_scale'], init_bias_y = settings['init_bias_y'])
@@ -331,7 +355,7 @@ if __name__ == "__main__":
 
     
     if settings['pretrained_model']:
-        pretrained_model_file = '/home/ubuntu/lottery_tickets_phoenix/ode_net/code/output/_holder_model_to_prune/best_val_model.pt'
+        pretrained_model_file = '/home/ubuntu/lottery_tickets_phoenix/ode_net/code/output/_pretrained_best_model/best_val_model.pt'
         odenet.inherit_params(pretrained_model_file)
 
     print('Using optimizer: {}'.format(settings['optimizer']))
@@ -361,38 +385,21 @@ if __name__ == "__main__":
         net_file.write(odenet.__str__())
         net_file.write('\n\n\n')
         net_file.write(inspect.getsource(ODENet.forward))
-        if absolute_flag:
-            net_file.write('\n')
-            net_file.write("I AM SWITCHING ALL EDGE SIGNS to POSITIVE!")
         net_file.write('\n')
         net_file.write('lambda at start (first 5 epochs) = {}'.format(loss_lambda_at_start))
         net_file.write('\n')
         net_file.write('and then lambda = {}'.format(loss_lambda_at_end))
         net_file.write('\n')
-        if prune_perc > 0 or initial_hit_perc > 0:
-            net_file.write('causal lottery!')
-            net_file.write('\n')
-            net_file.write('doing PPI mask + T mask')
-            if consider_multipliers: 
-                net_file.write('\n')
-                net_file.write('.....')
-                net_file.write('Considering multipliers for final layer pruning')   
-                net_file.write('.....')
-            net_file.write('\n')
-            net_file.write('pruning score lambda (PPI, Motif) = ({}, {})'.format(pruning_score_lambda_PPI, pruning_score_lambda_motif))
-            net_file.write('\n')
-            net_file.write('Initial hit = {} at epoch {}, then prune {} every {} epochs'.format(initial_hit_perc, masking_start_epoch, prune_perc, num_epochs_till_mask))
-        else:
-            net_file.write('No pruning!')
-            net_file.write('\n')
+        net_file.write('causal lottery!')
+        net_file.write('\n')
+        net_file.write('doing PPI mask + T mask')
+        net_file.write('\n')
+        net_file.write('pruning score lambda (PPI, Motif) = ({}, {})'.format(pruning_score_lambda_PPI, pruning_score_lambda_motif))
+        net_file.write('\n')
+        net_file.write('Initial hit = {} at epoch {}, then prune {} every {} epochs'.format(initial_hit_perc, masking_start_epoch, prune_perc, num_epochs_till_mask))
         if settings['pretrained_model']:
             net_file.write('\n')
             net_file.write('LOADED in a pre-trained model but forced lowest {} perc of params to zero'.format(prop_force_to_zero_for_loaded_model*100))
-            if consider_multipliers: 
-                net_file.write('\n')
-                net_file.write('.....')
-                net_file.write('Considering multipliers for forced zeroing of pre-trained model')   
-                net_file.write('.....')
     
     # Init plot
     if settings['viz']:
@@ -421,7 +428,7 @@ if __name__ == "__main__":
     
     tot_epochs = settings['epochs']
     #viz_epochs = [round(tot_epochs*1/5), round(tot_epochs*2/5), round(tot_epochs*3/5), round(tot_epochs*4/5),tot_epochs]
-    rep_epochs = [5, 10, 15, 30, 40, 50, 75, 100, 120, 150, 180, 200,220, 240, 260, 280, 300, 350, tot_epochs]
+    rep_epochs = [ 1, 5, 15, 30, 40, 50, 75, 100, 120, 150, 180, 200,220, 240, 260, 280, 300, 350, tot_epochs]
     viz_epochs = rep_epochs
     zeroth_drop_done = False
     first_drop_done = False 
@@ -444,18 +451,7 @@ if __name__ == "__main__":
         total_params = 0
         for name, module in odenet.named_modules():
             if isinstance(module, torch.nn.Linear):
-                if name in ['net_alpha_combine_sums.linear_out' , 'net_alpha_combine_prods.linear_out']:
-                    if consider_multipliers:
-                        print("Considering multipliers for zeroing of final layers")
-                        current_NN_weights_abs = abs(module.weight.detach())
-                        current_gene_mult_ReLU = torch.relu(odenet.gene_multipliers.detach().t())
-                        this_loaded_module_prune_score = current_NN_weights_abs * current_gene_mult_ReLU
-                        prune.l1_unstructured(module, name='weight', amount = prop_force_to_zero_for_loaded_model, importance_scores = this_loaded_module_prune_score) #CHANGE THIS!
-                    else:
-                        prune.l1_unstructured(module, name='weight', amount = prop_force_to_zero_for_loaded_model)        
-                else:
-                    prune.l1_unstructured(module, name='weight', amount = prop_force_to_zero_for_loaded_model) 
-                
+                prune.l1_unstructured(module, name='weight', amount = prop_force_to_zero_for_loaded_model) #, importance_scores = this_loaded_module_prune_score
                 print("SETTING LOWEST {} % OF ELEMENTS in {} TO ZERO".format(prop_force_to_zero_for_loaded_model*100, name))
                 total_params += module.weight.nelement()
                 total_pruned += torch.sum(module.weight == 0)
@@ -494,7 +490,7 @@ if __name__ == "__main__":
             for name, module in odenet.named_modules():
                 if isinstance(module, torch.nn.Linear): # and (prune_perc > 0 or initial_hit_perc > 0)
                     #current_NN_weights = module.weight.detach()
-                    if name == 'net_sums.linear_out': 
+                    if name in ['net_sums.linear_out','net_alpha_combine_sums.linear_out','net_alpha_combine_prods.linear_out' ]: 
                         current_NN_weights_abs = abs(module.weight.detach()) #GRAD!.detach()
                         current_NN_weights_abs = current_NN_weights_abs/torch.sum(current_NN_weights_abs) #trying normalization this for PPI layers+
                         
@@ -503,12 +499,6 @@ if __name__ == "__main__":
                         current_NN_weights_abs = torch.exp(module.weight.detach()) #GRAD! 
                         current_NN_weights_abs = current_NN_weights_abs/torch.sum(current_NN_weights_abs) #trying normalization this for PPI layers
 
-                    elif name in ['net_alpha_combine_sums.linear_out','net_alpha_combine_prods.linear_out' ]: 
-                        current_NN_weights_abs = abs(module.weight.detach()) #GRAD!.detach()
-                        if consider_multipliers:
-                            current_gene_mult_ReLU = torch.relu(odenet.gene_multipliers.detach().t())
-                            current_NN_weights_abs = current_NN_weights_abs * current_gene_mult_ReLU
-                        current_NN_weights_abs = current_NN_weights_abs/torch.sum(current_NN_weights_abs) #trying normalization this for PPI layers+
                     
                     if name in ['net_sums.linear_out','net_prods.linear_out'] and ((epoch == masking_start_epoch) or epoch % num_epochs_till_mask == 0): #name == 'net_prods.linear_out' or 
                         
@@ -516,8 +506,9 @@ if __name__ == "__main__":
                         S_S_transpose_inv = torch.inverse(torch.matmul(mask_curr, torch.transpose(mask_curr,0,1)))
                         S_PPI = torch.matmul(mask_curr, noisy_PPI)
                         S_mask_best_guess = torch.matmul(S_S_transpose_inv, S_PPI)
-                        
-                        updated_score = pruning_score_lambda_PPI * torch.abs(S_mask_best_guess) + (1 - pruning_score_lambda_PPI) * current_NN_weights_abs
+                        abs_norm_S_mask_best_guess = torch.abs(S_mask_best_guess)/torch.sum(torch.abs(S_mask_best_guess))
+
+                        updated_score = pruning_score_lambda_PPI * abs_norm_S_mask_best_guess + (1 - pruning_score_lambda_PPI) * current_NN_weights_abs
                         
                         prune.l1_unstructured(module, name='weight', amount=prune_this_epoch, importance_scores = updated_score)
                         my_current_custom_pruning_scores[name] = updated_score
@@ -532,9 +523,9 @@ if __name__ == "__main__":
                         T_tranpose_S_transpose = torch.transpose(torch.matmul(incoming_mask_curr,abs(noisy_prior_mat)),0,1)
                         S_S_transpose_inv = torch.inverse(torch.matmul(incoming_mask_curr, torch.transpose(incoming_mask_curr,0,1)))
                         C_mask_best_guess = torch.matmul(T_tranpose_S_transpose, S_S_transpose_inv)
-
+                        abs_norm_C_mask_best_guess = torch.abs(C_mask_best_guess)/torch.sum(torch.abs(C_mask_best_guess))
                         
-                        updated_score = pruning_score_lambda_motif * torch.abs(C_mask_best_guess)  + (1 - pruning_score_lambda_motif) * current_NN_weights_abs
+                        updated_score = pruning_score_lambda_motif * abs_norm_C_mask_best_guess  + (1 - pruning_score_lambda_motif) * current_NN_weights_abs
                         
                         #updated_score = mask_T.contiguous()
                         
@@ -689,7 +680,7 @@ if __name__ == "__main__":
                 #print("True loss of best training model (MSE) = ", true_loss_of_min_train_model.item())
                 print("True loss of best training model (MSE) = ", 0)
             print("Saving MSE plot...")
-            plot_MSE(epoch, training_loss, validation_loss, true_mean_losses, true_mean_losses_init_val_based, prior_losses, img_save_dir)    
+            plot_MSE_new(epoch, training_loss, validation_loss, true_mean_losses, true_mean_losses_init_val_based, prior_losses, img_save_dir)    
             
 
             print("Saving losses..")
@@ -697,14 +688,12 @@ if __name__ == "__main__":
                 L = [rep_epochs_so_far, rep_epochs_time_so_far, rep_epochs_train_losses, rep_epochs_val_losses, rep_epochs_mu_losses]
                 np.savetxt('{}rep_epoch_losses.csv'.format(output_root_dir), np.transpose(L), delimiter=',')    
             
-            #print("Saving best intermediate val model..")
-            #interm_model_file_name = 'trained_model_epoch_' + str(epoch)
-            #save_model(odenet, interm_models_save_dir , interm_model_file_name)
-                
+            if epoch >= 75:
+                print("Saving best intermediate val model..")
+                interm_model_file_name = 'trained_model_epoch_' + str(epoch)
+                save_model(odenet, interm_models_save_dir , interm_model_file_name)
+                    
             
-           
-        
-
         if consec_epochs_failed==epochs_to_fail_to_terminate:
             print("Went {} epochs without improvement; terminating.".format(epochs_to_fail_to_terminate))
             break
