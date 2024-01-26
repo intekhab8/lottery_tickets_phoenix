@@ -65,30 +65,32 @@ if __name__ == "__main__":
     neuron_dict = {"sim350": 40, "sim690": 50}
     models = ["phoenix_ground_truth","pathreg", "phoenix_blind_prune","phoenix_full_bio_prune", "phoenix_lambda_prune"]
     datasets = ["sim350"]
-    noises = [0, 0.025, 0.05]
+    noises = [0.025]
     
     
     datahandler_dim = {"sim350": 350}
     model_labels = {
         "phoenix_ground_truth": "Ground truth GRN",
-        "phoenix_blind_prune": "Blind pruning (\u03BB = 0)",  # Unicode for lambda is \u03BB
-        "phoenix_full_bio_prune": "Only biological pruning (\u03BB = 1)",
-        "phoenix_lambda_prune": "Our pruning (\u03BB chosen)",
+        "phoenix_blind_prune": "Uninformed pruning (\u03BB = 0)",  # Unicode for lambda is \u03BB
+        "phoenix_full_bio_prune": "DASH (\u03BB = 1)",
+        "phoenix_lambda_prune": "DASH (\u03BB optimized)",
         "pathreg": "PathReg (Aliee et al, 2022)",
     }
     SUB = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉")    
     #Plotting setup
     #plt.xticks(fontsize=10)
     #plt.yticks(fontsize=10)
-    fig_heat_sparse = plt.figure(figsize=(23,18)) # tight_layout=True
+    fig_heat_sparse = plt.figure(figsize=(27,5*len(noises))) # tight_layout=True
     axes_heat_sparse = fig_heat_sparse.subplots(ncols= len(models), nrows=len(noises), 
     sharex=False, sharey=False, 
     subplot_kw={'frameon':True})
     #fig_heat_sparse.subplots_adjust(hspace=0, wspace=0)
     border_width = 1.5
     tick_lab_size = 14
-    ax_lab_size = 15
-    color_mult = 0.05#0.25
+    ax_lab_size = 17
+    color_mult = 0.05 #0.05
+
+    
     
     plt.grid(True)
     
@@ -102,7 +104,10 @@ if __name__ == "__main__":
                 print("Now on model = {}, noise = {}".format(this_model, this_noise))
                 
                 row_num = noises.index(this_noise)
-                this_row_plots = axes_heat_sparse[row_num]
+                if len(axes_heat_sparse.shape) == 1:
+                    this_row_plots = [axes_heat_sparse[col_num] for col_num in range(len(axes_heat_sparse))]
+                else:    
+                    this_row_plots = axes_heat_sparse[row_num]
                 col_num = models.index(this_model)
                 ax = this_row_plots[col_num]
                 ax.spines['bottom'].set_linewidth(border_width)
@@ -115,8 +120,12 @@ if __name__ == "__main__":
 
                 if this_model == "phoenix_ground_truth":
                     z = np.genfromtxt('/home/ubuntu/lottery_tickets_phoenix/models_for_plots/{}/edge_prior_matrix_chalmers_350_noise_0.0.csv'.format(this_data), delimiter=",")
+                    c = ax.pcolormesh(x, y, z, cmap='RdBu', vmin=-0.001, vmax=0.001)
+                    #z_min, z_max = color_mult*-np.abs(z).max(), color_mult*np.abs(z).max()
                 else:    
                     z = get_effect_matrix(this_data, this_model, noise_string)
+                    z_min, z_max = color_mult*-np.abs(z).max(), color_mult*np.abs(z).max()
+                    c = ax.pcolormesh(x, y, z, cmap='RdBu', vmin=z_min, vmax=z_max)
                     #threshold = np.percentile(np.abs(z), 99)
                     #print(threshold)
                     # Set values below the threshold to 0
@@ -127,8 +136,8 @@ if __name__ == "__main__":
                 #z = z / row_sums[:, np.newaxis]
                 #ax.axvline(x=0.50, color='black', linewidth=2)
                
-                z_min, z_max = color_mult*-np.abs(z).max(), color_mult*np.abs(z).max()
-                c = ax.pcolormesh(x, y, z, cmap='RdBu', vmin=z_min, vmax=z_max) 
+                #z = np.abs(z)
+                 
                 ax.axis([x.min(), x.max(), y.min(), y.max()]) 
                 
                 if row_num == 0 and col_num == 0:
@@ -147,15 +156,16 @@ if __name__ == "__main__":
                     ax.set_title(model_labels[this_model], fontsize=ax_lab_size, pad = 10)
                 if col_num == 0:
                     ax.set_ylabel("Noise level = {:.0%}".format(this_noise/0.5), fontsize = ax_lab_size) 
-                 
+
+    #cbar.set_label(r'$\widetilde{D_{ij}}$= '+'Estimated effect of '+ r'$g_j$'+ ' on ' +r"$\frac{dg_i}{dt}$" +' in SIM350', size = ax_lab_size)
     cbar =  fig_heat_sparse.colorbar(c, ax=axes_heat_sparse.ravel().tolist(), 
-                                        shrink=0.95, orientation = "horizontal", pad = 0.05)
+                                        shrink=0.50, orientation = "vertical", pad = 0.01)
+
     cbar.set_ticks([0, 0.13, -0.13])
-    cbar.set_ticklabels(['None', 'Activating', 'Repressive'])
+    cbar.set_ticklabels(['None', 'Act.', 'Rep.'])
     cbar.ax.tick_params(labelsize = tick_lab_size+3) 
-    cbar.set_label(r'$\widetilde{D_{ij}}$= '+'Estimated effect of '+ r'$g_j$'+ ' on ' +r"$\frac{dg_i}{dt}$" +' in SIM350', size = ax_lab_size)
     cbar.outline.set_linewidth(2)
 
     
-    fig_heat_sparse.savefig('{}/manuscript_fig_heat_sparse_with_full_bio.png'.format(output_root_dir), bbox_inches='tight')
+    fig_heat_sparse.savefig('{}/manuscript_fig_heat_sparse_noise_5.png'.format(output_root_dir), bbox_inches='tight')
     
