@@ -96,29 +96,29 @@ if __name__ == "__main__":
     neuron_dict = {"sim350": 40, "sim690": 50}
     models = ["phoenix_ground_truth","pathreg", "phoenix_blind_prune", "phoenix_full_bio_prune", "phoenix_lambda_prune"]
     datasets = ["sim350"]
-    noises = [0, 0.025, 0.05]
+    noises = [0.025]
     
     
     datahandler_dim = {"sim350": 350}
     model_labels = {
-        "phoenix_ground_truth": "Ground truth PPI",
-        "phoenix_blind_prune": "Blind pruning (\u03BB = 0)",  # Unicode for lambda is \u03BB
-        "phoenix_full_bio_prune": "Only biological pruning (\u03BB = 1)",
-        "phoenix_lambda_prune": "Our pruning (\u03BB chosen)",
+        "phoenix_ground_truth": "Ground truth GRN",
+        "phoenix_blind_prune": "Uninformed pruning (\u03BB = 0)",  # Unicode for lambda is \u03BB
+        "phoenix_full_bio_prune": "DASH (\u03BB = 1)",
+        "phoenix_lambda_prune": "DASH (\u03BB optimized)",
         "pathreg": "PathReg (Aliee et al, 2022)",
     }
     SUB = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉")    
     #Plotting setup
     #plt.xticks(fontsize=10)
     #plt.yticks(fontsize=10)
-    fig_heat_sparse = plt.figure(figsize=(23,18)) # tight_layout=True
+    fig_heat_sparse = plt.figure(figsize=(27,5*len(noises))) # tight_layout=True
     axes_heat_sparse = fig_heat_sparse.subplots(ncols= len(models), nrows=len(noises), 
     sharex=False, sharey=False, 
     subplot_kw={'frameon':True})
     #fig_heat_sparse.subplots_adjust(hspace=0, wspace=0)
     border_width = 1.5
     tick_lab_size = 14
-    ax_lab_size = 15
+    ax_lab_size = 17
     color_mult = 0.02#0.025
     
     plt.grid(True)
@@ -133,7 +133,10 @@ if __name__ == "__main__":
                 print("Now on model = {}, noise = {}".format(this_model, this_noise))
                 
                 row_num = noises.index(this_noise)
-                this_row_plots = axes_heat_sparse[row_num]
+                if len(axes_heat_sparse.shape) == 1:
+                    this_row_plots = [axes_heat_sparse[col_num] for col_num in range(len(axes_heat_sparse))]
+                else:    
+                    this_row_plots = axes_heat_sparse[row_num]
                 col_num = models.index(this_model)
                 ax = this_row_plots[col_num]
                 ax.spines['bottom'].set_linewidth(border_width)
@@ -178,13 +181,13 @@ if __name__ == "__main__":
                     ax.set_ylabel("Noise level = {:.0%}".format(this_noise/0.5), fontsize = ax_lab_size) 
                  
     cbar =  fig_heat_sparse.colorbar(c, ax=axes_heat_sparse.ravel().tolist(), 
-                                        shrink=0.95, orientation = "horizontal", pad = 0.05)
-    cbar.set_ticks([0.02, 0.22])
-    cbar.set_ticklabels(['No coregulation', 'Strong coregulation'])
+                                        shrink=0.50, orientation = "vertical", pad = 0.01)
+    cbar.set_ticks([0.02, 0.30])
+    cbar.set_ticklabels(['None', 'Strong'])
     cbar.ax.tick_params(labelsize = tick_lab_size+3) 
-    cbar.set_label(r'$\widetilde{D_{ij}}$= '+'Estimated coregulation of '+ r'$g_i$'+ ' and ' +r"$g_j$" +' in SIM350', size = ax_lab_size)
+    #cbar.set_label(r'$\widetilde{D_{ij}}$= '+'Estimated coregulation of '+ r'$g_i$'+ ' and ' +r"$g_j$" +' in SIM350', size = ax_lab_size)
     cbar.outline.set_linewidth(2)
 
     
-    fig_heat_sparse.savefig('{}/manuscript_fig_module_corr_with_full_bio.png'.format(output_root_dir), bbox_inches='tight')
+    fig_heat_sparse.savefig('{}/manuscript_fig_module_corr_5.png'.format(output_root_dir), bbox_inches='tight')
     
