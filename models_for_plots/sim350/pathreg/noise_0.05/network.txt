@@ -1,0 +1,22 @@
+Sequential(
+  (0): initial_position()
+  (1): ODEBlock(
+    (odefunc): L0_MLP(
+      (output_sums): Sequential(
+        (0): SoftsignMod()
+        (1): L0Dense(350 -> 40, droprate_init=0.2, lamba=1, temperature=0.6666666666666666, weight_decay=0.0, local_rep=False)
+        (2): L0Dense(40 -> 350, droprate_init=0.5, lamba=1, temperature=0.6666666666666666, weight_decay=0.0, local_rep=False, bias=False)
+      )
+      (output_prods): Sequential(
+        (0): LogShiftedSoftSignMod()
+        (1): L0Dense(350 -> 40, droprate_init=0.2, lamba=1, temperature=0.6666666666666666, weight_decay=0.0, local_rep=False)
+        (2): ExponentialLayer()
+        (3): L0Dense(40 -> 350, droprate_init=0.5, lamba=1, temperature=0.6666666666666666, weight_decay=0.0, local_rep=False, bias=False)
+      )
+    )
+  )
+)
+.......
+lambda_l1 = 0.001
+lambda_pathreg = 0.0001
+num Monte Carlo reps = 1

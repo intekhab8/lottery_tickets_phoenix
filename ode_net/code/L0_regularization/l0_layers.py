@@ -44,6 +44,7 @@ class L0Dense(Module):
         print(self)
 
     def reset_parameters(self):
+        #init.sparse_(self.weights,  sparsity=0.95, std = 0.05) #0.05
         init.kaiming_normal(self.weights, mode='fan_out')
 
         self.qz_loga.data.normal_(math.log(1 - self.droprate_init) - math.log(self.droprate_init), 1e-2)

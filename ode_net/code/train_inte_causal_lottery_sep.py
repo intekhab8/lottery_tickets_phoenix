@@ -290,7 +290,11 @@ if __name__ == "__main__":
                                         init_bias_y = settings['init_bias_y'])
     
     #Read in the prior matrix
+<<<<<<< HEAD
     prior_mat_loc = '/home/ubuntu/lottery_tickets_phoenix/ground_truth_simulator/clean_data/edge_prior_matrix_chalmers_690_noise_{}.csv'.format(settings['noise'])
+=======
+    prior_mat_loc = '/home/ubuntu/lottery_tickets_phoenix/ground_truth_simulator/clean_data/edge_prior_matrix_chalmers_350_noise_{}.csv'.format(settings['noise'])
+>>>>>>> e945fd6666440a000ace8164b5cc4330a8b1c9af
     absolute_flag = False
     prior_mat = read_prior_matrix(prior_mat_loc, sparse = False, num_genes = data_handler.dim, absolute = absolute_flag)
 
@@ -315,7 +319,11 @@ if __name__ == "__main__":
     pruning_score_lambda_PPI = 0.05 
     pruning_score_lambda_motif = 0.01
     lr_schedule_patience = 3
+<<<<<<< HEAD
     prop_force_to_zero_for_loaded_model = 0.92
+=======
+    prop_force_to_zero_for_loaded_model = 0
+>>>>>>> e945fd6666440a000ace8164b5cc4330a8b1c9af
     consider_multipliers = True
 
     odenet = ODENet(device, data_handler.dim, explicit_time=settings['explicit_time'], neurons = settings['neurons_per_layer'], 
