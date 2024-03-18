@@ -309,7 +309,6 @@ class DataHandler:
             extrap_time_points_pt = torch.from_numpy(extrap_time_points)
             trajectories = []
             mu0 = self.get_mu0()
-            mu1 = self.get_mu1() #remove later
             if self.val_split == 1:
                 if fixed_traj_idx is None:
                     all_plotted_samples = sorted(np.random.choice(self.val_set_indx, num_val_trajs, replace=False))

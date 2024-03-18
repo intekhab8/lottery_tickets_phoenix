@@ -107,20 +107,22 @@ def random_multiply(mat_torch):
   return out_torch
 
 
-def read_prior_matrix(prior_mat_file_loc, sparse = False, num_genes = 11165, randomize = False):
+def read_prior_matrix(prior_mat_file_loc, sparse = False, num_genes = 11165, absolute = False):
     if sparse == False: 
         mat = np.genfromtxt(prior_mat_file_loc,delimiter=',')
         mat_torch = torch.from_numpy(mat)
         mat_torch = mat_torch.float()
-        if randomize:
-            print("I AM RANDOMLY FLIPPING EDGE SIGNS!")
-            mat_torch = random_multiply(mat_torch)
-        return mat_torch
+        if absolute:
+            print("I AM SWITCHING ALL EDGE SIGNS to POSITIVE!")
+            mat_torch = torch.abs(mat_torch)
     else: #when scaling up >10000
         mat = np.genfromtxt(prior_mat_file_loc,delimiter=',')
         sparse_mat = torch.sparse_coo_tensor([mat[:,0].astype(int)-1, mat[:,1].astype(int)-1], mat[:,2], ( num_genes,  num_genes))
         mat_torch = sparse_mat.to_dense().float()
-        return(mat_torch)
+        if absolute:
+            print("I AM SWITCHING ALL EDGE SIGNS to POSITIVE!")
+            mat_torch = torch.abs(mat_torch)
+    return(mat_torch)
 
 def normalize_values(my_tensor):
   """Normalizes the values of a PyTorch tensor.
@@ -318,24 +320,26 @@ if __name__ == "__main__":
     
     #Read in the prior matrix
     prior_mat_loc = '/home/ubuntu/lottery_tickets_phoenix/breast_cancer_data/clean_data/edge_prior_matrix_desmedt_11165.csv'
-    prior_mat = read_prior_matrix(prior_mat_loc, sparse = True, num_genes = data_handler.dim, randomize= False)
-    PPI_mat_loc = '/home/ubuntu/lottery_tickets_phoenix/breast_cancer_data/clean_data/PPI_matrix_desmedt_11165.csv'
-    PPI = read_prior_matrix(PPI_mat_loc, sparse = True, num_genes = data_handler.dim, randomize= False)
-    PPI =  PPI / torch.sum(PPI)
+    absolute_flag = True
+    prior_mat = read_prior_matrix(prior_mat_loc, sparse = True, num_genes = data_handler.dim, absolute = absolute_flag)
+    
     batch_for_prior = (torch.rand(10000,1,prior_mat.shape[0], device = data_handler.device) - 0.5)
     prior_grad = torch.matmul(batch_for_prior,prior_mat) #can be any model here that predicts the derivative
+    PPI_mat_loc = '/home/ubuntu/lottery_tickets_phoenix/breast_cancer_data/clean_data/PPI_matrix_desmedt_11165.csv'
+    PPI = read_prior_matrix(PPI_mat_loc, sparse = True, num_genes = data_handler.dim)
+    PPI =  PPI / torch.sum(PPI)
         
     noisy_PPI = PPI
     noisy_prior_mat = prior_mat
     
     loss_lambda_at_start = 1
-    loss_lambda_at_end =  1#0.999
+    loss_lambda_at_end =  0.999
     
 
     masking_start_epoch = 5
-    initial_hit_perc = 0.80
+    initial_hit_perc = 0#0.80
     num_epochs_till_mask = 40
-    prune_perc = 0.20
+    prune_perc = 0#0.20
     pruning_score_lambda_PPI =  0.9995
     pruning_score_lambda_motif = 0.9995
     lr_schedule_patience = 3
