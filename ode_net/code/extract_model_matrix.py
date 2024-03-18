@@ -26,6 +26,20 @@ from visualization_inte import *
 import matplotlib.pyplot as plt
 
 #torch.set_num_threads(4) #CHANGE THIS!
+def average_zeros_across_arrays(*arrays):
+    num_zeros = 0
+    total_elements = 0
+    
+    for array in arrays:
+        num_zeros += np.sum(np.abs(array) ==0)
+        total_elements += array.size
+    
+    if total_elements == 0:
+        return 0  # Avoid division by zero if the total number of elements is zero
+    
+    average_zeros = num_zeros / total_elements
+    return average_zeros
+
 
 def make_mask(X):
     triu = np.triu(X)
@@ -54,6 +68,7 @@ alpha_comb_prods = np.transpose(alpha_comb_prods.linear_out.weight.detach().nump
 gene_mult = np.transpose(torch.relu(gene_mult.detach()).numpy())
 
 effects_mat = np.matmul(Wo_sums,alpha_comb_sums) + np.matmul(Wo_prods,alpha_comb_prods)
+print(average_zeros_across_arrays(Wo_prods, Wo_sums, alpha_comb_prods* np.transpose(gene_mult), alpha_comb_sums* np.transpose(gene_mult)))
 #effects_mat[effects_mat != 0] = 1 # Set all non-zero elements to 1
 #effects_mat =   effects_mat #gene_mult.T*
 #make_mask(effects_mat)

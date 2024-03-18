@@ -29,7 +29,7 @@ from visualization_inte import *
 def save_model(odenet, folder, filename):
     odenet.save('{}{}.pt'.format(folder, filename))
 
-MODEL_TYPE = 'pathreg'
+MODEL_TYPE = 'L0'
 
 parser = argparse.ArgumentParser('Testing')
 parser.add_argument('--settings', type=str, default='config_breast.cfg')

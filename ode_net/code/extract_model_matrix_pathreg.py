@@ -67,17 +67,18 @@ with torch.no_grad():
         effects_mat = np.matmul(Wo_sums,alpha_comb_sums) 
 
     gene_mult = np.transpose(torch.relu(pathreg_model[1].odefunc.gene_multipliers.detach()).numpy())
-
+    print(np.sum(gene_mult == 0) / gene_mult.size)
 #effects_mat[np.abs(effects_mat)<1e-5] = 0.
 effects_mat =   effects_mat * np.transpose(gene_mult)
 
 if hasattr(pathreg_model[1].odefunc, 'output_prods'):
-    my_sparsity = average_zeros_across_arrays(Wo_prods, Wo_sums, alpha_comb_prods, alpha_comb_sums)
+    my_sparsity = average_zeros_across_arrays(Wo_prods, Wo_sums, alpha_comb_prods* np.transpose(gene_mult), alpha_comb_sums* np.transpose(gene_mult))
+    
 else:
     my_sparsity = average_zeros_across_arrays(Wo_sums, alpha_comb_sums)        
-print("Sparsity (for now) : {:.2%}".format(my_sparsity))
+print("Sparsity (incl. multipliers) : {:.2%}".format(my_sparsity))
 
-np.savetxt("/home/ubuntu/lottery_tickets_phoenix/ode_net/code/model_inspect/effects_mat_pathreg.csv", effects_mat, delimiter=",")
+#np.savetxt("/home/ubuntu/lottery_tickets_phoenix/ode_net/code/model_inspect/effects_mat_pathreg.csv", effects_mat, delimiter=",")
 
 np.savetxt("/home/ubuntu/lottery_tickets_phoenix/ode_net/code/model_inspect/wo_sums.csv", Wo_sums, delimiter=",")
 np.savetxt("/home/ubuntu/lottery_tickets_phoenix/ode_net/code/model_inspect/bo_sums.csv", Bo_sums, delimiter=",")
@@ -90,6 +91,7 @@ else:
     np.savetxt("/home/ubuntu/lottery_tickets_phoenix/ode_net/code/model_inspect/alpha_comb.csv", np.vstack((alpha_comb_sums, alpha_comb_sums)), delimiter=",")
 
 np.savetxt("/home/ubuntu/lottery_tickets_phoenix/ode_net/code/model_inspect/gene_mult.csv", gene_mult, delimiter=",")
+
 
 
 '''
