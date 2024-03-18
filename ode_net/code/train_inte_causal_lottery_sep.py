@@ -232,7 +232,7 @@ def save_model(odenet, folder, filename):
 
 parser = argparse.ArgumentParser('Testing')
 parser.add_argument('--settings', type=str, default='config_inte.cfg')
-clean_name =  "chalmers_350genes_150samples_earlyT_0bimod_1initvar" 
+clean_name =  "chalmers_690genes_150samples_earlyT_0bimod_1initvar" 
 parser.add_argument('--data', type=str, default='/home/ubuntu/lottery_tickets_phoenix/ground_truth_simulator/clean_data/{}.csv'.format(clean_name))
 
 args = parser.parse_args()
@@ -290,8 +290,8 @@ if __name__ == "__main__":
                                         init_bias_y = settings['init_bias_y'])
     
     #Read in the prior matrix
-    prior_mat_loc = '/home/ubuntu/lottery_tickets_phoenix/ground_truth_simulator/clean_data/edge_prior_matrix_chalmers_350_noise_{}.csv'.format(settings['noise'])
-    absolute_flag = True
+    prior_mat_loc = '/home/ubuntu/lottery_tickets_phoenix/ground_truth_simulator/clean_data/edge_prior_matrix_chalmers_690_noise_{}.csv'.format(settings['noise'])
+    absolute_flag = False
     prior_mat = read_prior_matrix(prior_mat_loc, sparse = False, num_genes = data_handler.dim, absolute = absolute_flag)
 
     batch_for_prior = (torch.rand(10000,1,prior_mat.shape[0], device = data_handler.device) - 0.5)
@@ -309,21 +309,13 @@ if __name__ == "__main__":
     
 
     masking_start_epoch = 3
-    initial_hit_perc = 0#0.70
+    initial_hit_perc = 0 #0.70
     num_epochs_till_mask = 10
     prune_perc = 0 #0.10
     pruning_score_lambda_PPI = 0.05 
     pruning_score_lambda_motif = 0.01
     lr_schedule_patience = 3
-<<<<<<< HEAD
-    prop_force_to_zero_for_loaded_model = 0.75
-=======
-<<<<<<< HEAD
-    prop_force_to_zero_for_loaded_model = 0.83
-=======
-    prop_force_to_zero_for_loaded_model = 0
->>>>>>> b6d7d12c359a922f0134e58b51df0173b371b2a1
->>>>>>> 2861641c62d018dcb03c8cd3288d96505914786f
+    prop_force_to_zero_for_loaded_model = 0.92
     consider_multipliers = True
 
     odenet = ODENet(device, data_handler.dim, explicit_time=settings['explicit_time'], neurons = settings['neurons_per_layer'], 
@@ -429,7 +421,7 @@ if __name__ == "__main__":
     
     tot_epochs = settings['epochs']
     #viz_epochs = [round(tot_epochs*1/5), round(tot_epochs*2/5), round(tot_epochs*3/5), round(tot_epochs*4/5),tot_epochs]
-    rep_epochs = [5, 10, 15, 30, 40, 50, 75, 100, 120, 150, 180, 200,220, 240, 260, 280, 300, 350, tot_epochs]
+    rep_epochs = [5, 10, 15, 30, 40, 50, 75, 100, 120, 150, 180, 200,220, 240, 260, 280, 300, 690, tot_epochs]
     viz_epochs = rep_epochs
     zeroth_drop_done = False
     first_drop_done = False 
