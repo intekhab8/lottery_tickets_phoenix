@@ -18,7 +18,7 @@ import random
 
 class DataHandler:
 
-    def __init__(self, data_np, data_pt, time_np, time_pt, dim, ntraj, val_split, device, normalize, batch_type, batch_time, batch_time_frac, data_np_0noise, data_pt_0noise, img_save_dir, init_bias_y):
+    def __init__(self, data_np, data_pt, time_np, time_pt, dim, ntraj, val_split, device, normalize, batch_type, batch_time, batch_time_frac, data_np_0noise, data_pt_0noise, img_save_dir, init_bias_y, my_fixed_val_for_hema = 0):
         self.data_np = data_np
         self.data_pt = data_pt
         self.data_np_0noise = data_np_0noise
@@ -30,6 +30,7 @@ class DataHandler:
         self.batch_type = batch_type
         self.batch_time = batch_time
         self.batch_npoints = int(ceil(batch_time_frac * batch_time))
+        self.my_fixed_val_for_hema = my_fixed_val_for_hema
         if normalize:
             self._normalize()
         self.device = device
@@ -37,7 +38,7 @@ class DataHandler:
         self.epoch_done = False
         self.img_save_dir = img_save_dir
         self.init_bias_y = init_bias_y
-        self.num_trajs_to_plot = 7
+        self.num_trajs_to_plot = 2
         #self.noise = noise
 
         self._calc_datasize()
@@ -57,10 +58,10 @@ class DataHandler:
         
 
     @classmethod
-    def fromcsv(cls, fp, device, val_split, normalize=False, batch_type='single', batch_time=1, batch_time_frac=1.0, noise = 0, img_save_dir = "", scale_expression = 1, log_scale = False, init_bias_y = 0):
+    def fromcsv(cls, fp, device, val_split, normalize=False, batch_type='single', batch_time=1, batch_time_frac=1.0, noise = 0, img_save_dir = "", scale_expression = 1, log_scale = False, init_bias_y = 0, my_fixed_val_for_hema = 0):
         ''' Create a datahandler from a CSV file '''
         data_np, data_pt, t_np, t_pt, dim, ntraj, data_np_0noise, data_pt_0noise = readcsv(fp, device, noise_to_add = noise, scale_expression = scale_expression, log_scale = log_scale)
-        return DataHandler(data_np, data_pt, t_np, t_pt, dim, ntraj, val_split, device, normalize, batch_type, batch_time, batch_time_frac, data_np_0noise, data_pt_0noise, img_save_dir, init_bias_y)
+        return DataHandler(data_np, data_pt, t_np, t_pt, dim, ntraj, val_split, device, normalize, batch_type, batch_time, batch_time_frac, data_np_0noise, data_pt_0noise, img_save_dir, init_bias_y,  my_fixed_val_for_hema)
 
     @classmethod
     def fromgenerator(cls, generator, val_split, device, normalize=False):
@@ -108,9 +109,11 @@ class DataHandler:
         t = []
         target = []
         for i in batch_indx:
-            batch.append(self.data_pt[i[0]][i[1]])
-            target.append(self.data_pt[i[0]][i[1] + 1])
-            t.append(torch.stack([self.time_pt[i[0]][i[1] + ii] for ii in range(2)]))
+            potential_target = self.data_pt[i[0]][i[1] + 1]
+            if not torch.isnan(potential_target).all().item():
+                batch.append(self.data_pt[i[0]][i[1]])
+                target.append(potential_target)
+                t.append(torch.stack([self.time_pt[i[0]][i[1] + ii] for ii in range(2)]))
         for i in indx:
             self.train_set.pop(i)
         # Convert the lists to tensors
@@ -184,7 +187,7 @@ class DataHandler:
         self.n_val = int((self.datasize - self.ntraj) * val_split)
         all_indx = np.arange(len(self.indx))
         val_indx = np.random.choice(all_indx, size=self.n_val, replace=False)
-        #val_indx = np.array([5, 40, 45]) #for yeast
+        
         #val_indx = np.array([ 16,  39,  42,  51,  55,  68,  78, 101, 107, 144, 160, 184, 208,233, 237, 318, 319, 320, 324, 335, 378, 393, 394, 422, 433, 434, 447, 469, 482, 491, 493, 495, 513, 529, 541, 546, 563, 570, 577])
         train_indx = np.setdiff1d(all_indx, val_indx, assume_unique=True)
         self.val_set_indx = [self.indx[x] for x in val_indx]
@@ -196,6 +199,7 @@ class DataHandler:
         ''' Split the data into a training set and validation set '''
         self.n_val = int(round(self.ntraj * val_split))
         self.val_set_indx = np.random.choice(np.arange(self.ntraj), size=self.n_val, replace=False)
+        self.val_set_indx = np.array([ self.my_fixed_val_for_hema]) #for hema data
         #self.val_set_indx = np.array([3, 23, 25, 61, 74, 90, 103, 128, 139, 146]) #fixed val_set
         traj_indx = np.arange(self.ntraj)
         self.train_set_original = np.setdiff1d(traj_indx, self.val_set_indx)
@@ -381,26 +385,30 @@ class DataHandler:
         self.val_data = []
         self.val_target = []
         self.val_t = []
-        if self.val_set_indx:
-            for i in self.val_set_indx:
-                self.val_data.append(self.data_pt[i[0]][i[1]])
-                self.val_target.append(self.data_pt[i[0]][i[1] + 1])
-                self.val_t.append(torch.stack([self.time_pt[i[0]][i[1] + ii] for ii in range(2)]))
-            self.val_data = torch.stack(self.val_data).to(self.device)
-            self.val_target = torch.stack(self.val_target).to(self.device)
-            self.val_t = torch.stack(self.val_t).to(self.device)
+        for i in self.val_set_indx:
+            self.val_data.append(self.data_pt[i[0]][i[1]])
+            self.val_target.append(self.data_pt[i[0]][i[1] + 1])
+            self.val_t.append(torch.stack([self.time_pt[i[0]][i[1] + ii] for ii in range(2)]))
+        self.val_data = torch.stack(self.val_data).to(self.device)
+        self.val_target = torch.stack(self.val_target).to(self.device)
+        self.val_t = torch.stack(self.val_t).to(self.device)
 
     def _create_validation_set_traj(self):
         ''' Create the validation set '''
         self.val_data = []
         self.val_target = []
         self.val_t = []
-        if self.val_set_indx.any():
-            for i in self.val_set_indx:
-                self.val_data.append(self.data_pt[i][0:-1]) 
-                self.val_target.append(self.data_pt[i][1::])
-                self.val_t.append(torch.stack([torch.stack((self.time_pt[i][s], self.time_pt[i][s +1])) for s in range(len(self.time_pt[i])-1)]))
-                #self.val_t.append(self.time_pt[i]) IH commented out and added line above for traj method 3/21/23
+        #print(self.val_set_indx)
+        for i in self.val_set_indx:
+            this_data_pt = self.data_pt[i]
+            this_time_pt = self.time_pt[i]
+
+            this_data_pt = this_data_pt[~torch.isnan(this_data_pt).any(dim = 2)].unsqueeze(1)
+            this_time_pt = this_time_pt[~torch.isnan(this_time_pt)]
+            self.val_data.append(this_data_pt[0:-1]) 
+            self.val_target.append(this_data_pt[1::])
+            self.val_t.append(torch.stack([torch.stack((this_time_pt[s], this_time_pt[s +1])) for s in range(len(this_time_pt)-1)]))
+            #self.val_t.append(self.time_pt[i]) IH commented out and added line above for traj method 3/21/23
             self.val_data = torch.cat(self.val_data, dim = 0).to(self.device) 
             self.val_target = torch.cat(self.val_target, dim = 0).to(self.device) 
             self.val_t = torch.cat(self.val_t, dim = 0).to(self.device) 
@@ -412,14 +420,13 @@ class DataHandler:
         self.val_data = []
         self.val_target = []
         self.val_t = []
-        if self.val_set_indx:
-            for i in self.val_set_indx:
-                self.val_data.append(self.data_pt[i[0]][i[1]:i[1]+self.batch_time])
-                self.val_target.append(self.data_pt[i[0]][i[1]+1:i[1]+self.batch_time+1])
-                self.val_t.append(torch.tensor([self.time_pt[i[0]][i[1] + ii] for ii in range(self.batch_time+1)]))
-            self.val_data = torch.stack(self.val_data).squeeze().to(self.device)
-            self.val_target = torch.stack(self.val_target).squeeze().to(self.device)
-            self.val_t = torch.stack(self.val_t).to(self.device)
+        for i in self.val_set_indx:
+            self.val_data.append(self.data_pt[i[0]][i[1]:i[1]+self.batch_time])
+            self.val_target.append(self.data_pt[i[0]][i[1]+1:i[1]+self.batch_time+1])
+            self.val_t.append(torch.tensor([self.time_pt[i[0]][i[1] + ii] for ii in range(self.batch_time+1)]))
+        self.val_data = torch.stack(self.val_data).squeeze().to(self.device)
+        self.val_target = torch.stack(self.val_target).squeeze().to(self.device)
+        self.val_t = torch.stack(self.val_t).to(self.device)
 
     def get_validation_set(self):
         return self.val_data, self.val_t, self.val_target, self.n_val

@@ -101,11 +101,11 @@ if __name__ == "__main__":
     
     datahandler_dim = {"sim350": 350}
     model_labels = {
-        "phoenix_ground_truth": "Ground truth GRN",
-        "phoenix_blind_prune": "Uninformed pruning (\u03BB = 0)",  # Unicode for lambda is \u03BB
-        "phoenix_full_bio_prune": "DASH (\u03BB = 1)",
-        "phoenix_lambda_prune": "DASH (\u03BB optimized)",
-        "pathreg": "PathReg (Aliee et al, 2022)",
+        "phoenix_ground_truth": "Ground truth",
+        "phoenix_blind_prune": "IMP",  # Unicode for lambda is \u03BB
+        "phoenix_full_bio_prune": "Bio Pruning",
+        "phoenix_lambda_prune": "DASH",
+        "pathreg": "PathReg",
     }
     SUB = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉")    
     #Plotting setup
@@ -117,8 +117,8 @@ if __name__ == "__main__":
     subplot_kw={'frameon':True})
     #fig_heat_sparse.subplots_adjust(hspace=0, wspace=0)
     border_width = 1.5
-    tick_lab_size = 14
-    ax_lab_size = 17
+    tick_lab_size = 16
+    ax_lab_size = 24
     color_mult = 0.02#0.025
     
     plt.grid(True)
@@ -178,13 +178,16 @@ if __name__ == "__main__":
                 if row_num == 0:
                     ax.set_title(model_labels[this_model], fontsize=ax_lab_size, pad = 10)
                 if col_num == 0:
-                    ax.set_ylabel("Noise level = {:.0%}".format(this_noise/0.5), fontsize = ax_lab_size) 
+                    if len(axes_heat_sparse.shape) == 1:
+                        ax.set_ylabel("Coregulatory effects", fontsize = ax_lab_size) 
+                    else:    
+                        ax.set_ylabel("Noise level = {:.0%}".format(this_noise/0.5), fontsize = ax_lab_size) 
                  
     cbar =  fig_heat_sparse.colorbar(c, ax=axes_heat_sparse.ravel().tolist(), 
                                         shrink=0.50, orientation = "vertical", pad = 0.01)
     cbar.set_ticks([0.02, 0.30])
     cbar.set_ticklabels(['None', 'Strong'])
-    cbar.ax.tick_params(labelsize = tick_lab_size+3) 
+    cbar.ax.tick_params(labelsize = tick_lab_size+5) 
     #cbar.set_label(r'$\widetilde{D_{ij}}$= '+'Estimated coregulation of '+ r'$g_i$'+ ' and ' +r"$g_j$" +' in SIM350', size = ax_lab_size)
     cbar.outline.set_linewidth(2)
 

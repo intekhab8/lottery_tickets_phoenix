@@ -291,9 +291,9 @@ def save_model(pathreg_model, opt, epoch, folder, filename):
             '{}/{}.pt'.format(folder, filename))  
 
 parser = argparse.ArgumentParser('Testing')
-parser.add_argument('--settings', type=str, default='config_inte.cfg')
-clean_name =  "chalmers_690genes_150samples_earlyT_0bimod_1initvar" 
-parser.add_argument('--data', type=str, default='/home/ubuntu/lottery_tickets_phoenix/ground_truth_simulator/clean_data/{}.csv'.format(clean_name))
+parser.add_argument('--settings', type=str, default='config_hema.cfg')
+clean_name =  "hema_B_529genes_2samples" 
+parser.add_argument('--data', type=str, default='/home/ubuntu/lottery_tickets_phoenix/hema_data/clean_data/{}.csv'.format(clean_name))
 
 args = parser.parse_args()
 
@@ -342,7 +342,7 @@ if __name__ == "__main__":
                                         init_bias_y = settings['init_bias_y'])
     
     #Read in the prior matrix
-    prior_mat_loc = '/home/ubuntu/lottery_tickets_phoenix/ground_truth_simulator/clean_data/edge_prior_matrix_chalmers_690_noise_{}.csv'.format(settings['noise'])
+    prior_mat_loc = '/home/ubuntu/lottery_tickets_phoenix/hema_data/clean_data/edge_prior_matrix_hema_529.csv'
     absolute_flag = False
     prior_mat = read_prior_matrix(prior_mat_loc, sparse = False, num_genes = data_handler.dim, absolute = absolute_flag)
 
@@ -351,14 +351,14 @@ if __name__ == "__main__":
     noisy_prior_mat = prior_mat
     
     lr_schedule_patience = 3
-    lambda_l1 =  0.001
-    lambda_pathreg = 0.0001
+    lambda_l1 =  0.01
+    lambda_pathreg = 0.001
     num_reps = 1
 
     #X0 = _initial_cond(data,args['ntimestamps'])
     #tX,tT,tX0 = array_tensor(data,time,X0)
 
-    nhidden = 50
+    nhidden = settings['neurons_per_layer']
     data_dim = data_handler.dim
     feature_layers = [initial_position(data_dim, nhidden), 
                     ODEBlock(
