@@ -336,6 +336,15 @@ if __name__ == "__main__":
     loss_lambda_at_end =  0.999
     
 
+<<<<<<< HEAD
+    masking_start_epoch = 5
+    initial_hit_perc = 0#0.80
+    num_epochs_till_mask = 40
+    prune_perc = 0#0.20
+    pruning_score_lambda_PPI =  0.9995
+    pruning_score_lambda_motif = 0.9995
+    lr_schedule_patience = 3
+=======
     masking_start_epoch = 10
     initial_hit_perc = 0.90
     num_epochs_till_mask = 20
@@ -343,6 +352,7 @@ if __name__ == "__main__":
     pruning_score_lambda_PPI = 0.9995
     pruning_score_lambda_motif = 0.995
     lr_schedule_patience = 2
+>>>>>>> e945fd6666440a000ace8164b5cc4330a8b1c9af
     prop_force_to_zero_for_loaded_model = 0
     consider_multipliers = True
 

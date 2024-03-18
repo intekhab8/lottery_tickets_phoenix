@@ -65,29 +65,29 @@ if __name__ == "__main__":
     neuron_dict = {"sim350": 40, "sim690": 50}
     models = ["phoenix_ground_truth","pathreg", "phoenix_blind_prune","phoenix_full_bio_prune", "phoenix_lambda_prune"]
     datasets = ["sim350"]
-    noises = [0.025]
+    noises = [0, 0.05]
     
     
     datahandler_dim = {"sim350": 350}
     model_labels = {
-        "phoenix_ground_truth": "Ground truth GRN",
-        "phoenix_blind_prune": "Uninformed pruning (\u03BB = 0)",  # Unicode for lambda is \u03BB
-        "phoenix_full_bio_prune": "DASH (\u03BB = 1)",
-        "phoenix_lambda_prune": "DASH (\u03BB optimized)",
-        "pathreg": "PathReg (Aliee et al, 2022)",
+        "phoenix_ground_truth": "Ground truth",
+        "phoenix_blind_prune": "IMP",  # Unicode for lambda is \u03BB
+        "phoenix_full_bio_prune": "Bio Pruning",
+        "phoenix_lambda_prune": "DASH",
+        "pathreg": "PathReg",
     }
     SUB = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉")    
     #Plotting setup
     #plt.xticks(fontsize=10)
     #plt.yticks(fontsize=10)
-    fig_heat_sparse = plt.figure(figsize=(27,5*len(noises))) # tight_layout=True
+    fig_heat_sparse = plt.figure(figsize=(29,5*len(noises))) # tight_layout=True
     axes_heat_sparse = fig_heat_sparse.subplots(ncols= len(models), nrows=len(noises), 
     sharex=False, sharey=False, 
     subplot_kw={'frameon':True})
     #fig_heat_sparse.subplots_adjust(hspace=0, wspace=0)
     border_width = 1.5
-    tick_lab_size = 14
-    ax_lab_size = 17
+    tick_lab_size = 16
+    ax_lab_size = 24
     color_mult = 0.05 #0.05
 
     
@@ -155,17 +155,20 @@ if __name__ == "__main__":
                 if row_num == 0:
                     ax.set_title(model_labels[this_model], fontsize=ax_lab_size, pad = 10)
                 if col_num == 0:
-                    ax.set_ylabel("Noise level = {:.0%}".format(this_noise/0.5), fontsize = ax_lab_size) 
+                    if len(axes_heat_sparse.shape) == 1:
+                        ax.set_ylabel("Regulatory effects", fontsize = ax_lab_size) 
+                    else:    
+                        ax.set_ylabel("Noise level = {:.0%}".format(this_noise/0.5), fontsize = ax_lab_size) 
 
     #cbar.set_label(r'$\widetilde{D_{ij}}$= '+'Estimated effect of '+ r'$g_j$'+ ' on ' +r"$\frac{dg_i}{dt}$" +' in SIM350', size = ax_lab_size)
     cbar =  fig_heat_sparse.colorbar(c, ax=axes_heat_sparse.ravel().tolist(), 
-                                        shrink=0.50, orientation = "vertical", pad = 0.01)
+                                        shrink=0.60, orientation = "vertical", pad = 0.01)
 
     cbar.set_ticks([0, 0.13, -0.13])
     cbar.set_ticklabels(['None', 'Act.', 'Rep.'])
-    cbar.ax.tick_params(labelsize = tick_lab_size+3) 
+    cbar.ax.tick_params(labelsize = tick_lab_size+5) 
     cbar.outline.set_linewidth(2)
 
     
-    fig_heat_sparse.savefig('{}/manuscript_fig_heat_sparse_noise_5.png'.format(output_root_dir), bbox_inches='tight')
+    fig_heat_sparse.savefig('{}/manuscript_fig_heat_sparse_noise_010.png'.format(output_root_dir), bbox_inches='tight', dpi = 200)
     

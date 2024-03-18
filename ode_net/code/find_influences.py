@@ -29,12 +29,14 @@ from visualization_inte import *
 def save_model(odenet, folder, filename):
     odenet.save('{}{}.pt'.format(folder, filename))
 
-MODEL_TYPE = 'lambda_pruning'
+MODEL_TYPE = 'blind_pruning'
+lineage = 'B'
+
 
 parser = argparse.ArgumentParser('Testing')
-parser.add_argument('--settings', type=str, default='config_breast.cfg')
-clean_name =  "desmedt_11165genes_1sample_186T" 
-parser.add_argument('--data', type=str, default='/home/ubuntu/lottery_tickets_phoenix/breast_cancer_data/clean_data/{}.csv'.format(clean_name))
+parser.add_argument('--settings', type=str, default='config_hema.cfg')
+clean_name =  "hemaS1D2_529genes_3samples" 
+parser.add_argument('--data', type=str, default='/home/ubuntu/lottery_tickets_phoenix/hema_data/clean_data/{}.csv'.format(clean_name))
 
 args = parser.parse_args()
 device = "cpu"
@@ -60,7 +62,7 @@ if __name__ == "__main__":
     odenet = ODENet(device, data_handler.dim, explicit_time=settings['explicit_time'], neurons = settings['neurons_per_layer'], 
                     log_scale = settings['log_scale'], init_bias_y = settings['init_bias_y'])
     odenet.float()
-    pretrained_model_file = '/home/ubuntu/lottery_tickets_phoenix/all_manuscript_models/breast_cancer/{}/best_val_model.pt'.format(MODEL_TYPE)
+    pretrained_model_file = '/home/ubuntu/lottery_tickets_phoenix/all_manuscript_models/hema_data_{}/{}/best_val_model.pt'.format(lineage, MODEL_TYPE)
     odenet.load(pretrained_model_file)
     print(odenet)
 
@@ -80,5 +82,5 @@ if __name__ == "__main__":
         print(this_gene)
 
     print("done, saving now!")
-    np.savetxt('/home/ubuntu/lottery_tickets_phoenix/all_manuscript_models/breast_cancer/inferred_influences/inferred_influence_{}.csv'.format(MODEL_TYPE), 
+    np.savetxt('/home/ubuntu/lottery_tickets_phoenix/all_manuscript_models/hema_data_{}/inferred_influences/inferred_influence_{}.csv'.format(lineage, MODEL_TYPE), 
                     all_scores, delimiter=',') 

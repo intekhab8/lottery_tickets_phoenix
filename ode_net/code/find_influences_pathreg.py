@@ -32,11 +32,12 @@ def save_model(odenet, folder, filename):
 MODEL_TYPE = 'L0'
 
 parser = argparse.ArgumentParser('Testing')
-parser.add_argument('--settings', type=str, default='config_breast.cfg')
-clean_name =  "desmedt_11165genes_1sample_186T" 
-parser.add_argument('--data', type=str, default='/home/ubuntu/lottery_tickets_phoenix/breast_cancer_data/clean_data/{}.csv'.format(clean_name))
+parser.add_argument('--settings', type=str, default='config_hema.cfg')
+clean_name =  "hema_B_529genes_2samples" 
+parser.add_argument('--data', type=str, default='/home/ubuntu/lottery_tickets_phoenix/hema_data/clean_data/{}.csv'.format(clean_name))
 
 args = parser.parse_args()
+
 device = "cpu"
 # Main function
 if __name__ == "__main__":
@@ -57,14 +58,14 @@ if __name__ == "__main__":
                                         init_bias_y = settings['init_bias_y'])
 
 
-    pretrained_model_file = '/home/ubuntu/lottery_tickets_phoenix/all_manuscript_models/breast_cancer/{}/best_val_model.pt'.format(MODEL_TYPE)
+    pretrained_model_file = '/home/ubuntu/lottery_tickets_phoenix/all_manuscript_models/hema_data_B/{}/best_val_model.pt'.format(MODEL_TYPE)
     pathreg_model = torch.load(pretrained_model_file)
     print(pathreg_model)
 
 
     time_pts_to_project = torch.from_numpy(np.arange(0,1,0.1))
     pathreg_model[1].set_times(time_pts_to_project)
-    n_random_inputs_per_gene = 3
+    n_random_inputs_per_gene = 20
     all_scores = []
     #Read in the prior matrix
     for this_gene in tqdm(range(data_handler.dim), desc="Genes Progress"):#
@@ -80,11 +81,8 @@ if __name__ == "__main__":
             this_gene_score_sum += torch.mean(abs(unpert_out[1:,:,all_other_genes] - pert_out[1:,:,all_other_genes])).item()
         
         all_scores.append(this_gene_score_sum/n_random_inputs_per_gene)
-        if this_gene % 1000 == 0: 
-            np.savetxt('/home/ubuntu/lottery_tickets_phoenix/all_manuscript_models/breast_cancer/inferred_influences/inferred_influence_{}_first_{}.csv'.format(MODEL_TYPE, this_gene+1), 
-                        all_scores, delimiter=',') 
-
+        
 
     print("done, saving now!")
-    np.savetxt('/home/ubuntu/lottery_tickets_phoenix/all_manuscript_models/breast_cancer/inferred_influences/inferred_influence_{}.csv'.format(MODEL_TYPE), 
+    np.savetxt('/home/ubuntu/lottery_tickets_phoenix/all_manuscript_models/hema_data_B/inferred_influences/inferred_influence_{}.csv'.format(MODEL_TYPE), 
                     all_scores, delimiter=',') 

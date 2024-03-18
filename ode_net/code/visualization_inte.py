@@ -105,8 +105,8 @@ class Visualizator1D(Visualizator):
             upper_lim = 1.3
             lower_lim = 0.4
         else: #i.e. linear 
-            upper_lim = 1.1 #6+14 
-            lower_lim = -0.1 #-6+10 
+            upper_lim = 0.2 #6+14 
+            lower_lim = 0 #-6+10 
 
         for row_num,this_row_plots in enumerate(self.axes_traj_split):
             for col_num, ax in enumerate(this_row_plots):
@@ -146,7 +146,7 @@ class Visualizator1D(Visualizator):
                     #ax.plot(times[sample_idx].flatten()[0:], approx_traj[:,:,gene].numpy().flatten(), color = plot_col, linestyle = "dashdot", lw=1) 
                     ax.plot( self.extrap_timepoints, approx_traj[:,:,gene].numpy().flatten(), color = plot_col, linestyle = "dashdot", lw=1) #
                     ax.plot(times[sample_idx].flatten(), traj[:,:,gene].flatten(), 'ko', alpha=0.2)
-                    ax.plot(times[sample_idx].flatten(), true_mean[:,:,gene].flatten(),'g-', lw=1.5, alpha = 0.5) #
+                    #ax.plot(times[sample_idx].flatten(), true_mean[:,:,gene].flatten(),'g-', lw=1.5, alpha = 0.5) #
                    
                 
                 ax.set_xlabel(r'$t$')
