@@ -12,6 +12,7 @@ from time import perf_counter, process_time
 import torch
 import torch.optim as optim
 import torch.nn.utils.prune as prune
+import torch.nn as nn
 
 try:
     from torchdiffeq.__init__ import odeint_adjoint as odeint
@@ -243,7 +244,7 @@ if __name__ == "__main__":
     sys.setrecursionlimit(3000)
     print('Loading settings from file {}'.format(args.settings))
     settings = read_arguments_from_file(args.settings)
-    cleaned_file_name = clean_name
+    cleaned_file_name = "synflow_"+clean_name
     save_file_name = _build_save_file_name(cleaned_file_name, settings['epochs'])
 
     if settings['debug']:
@@ -254,7 +255,6 @@ if __name__ == "__main__":
     img_save_dir = '{}img/'.format(output_root_dir)
     interm_models_save_dir = '{}interm_models/'.format(output_root_dir)
     init_model_save_dir = '{}init_model/'.format(output_root_dir) 
-    #intermediate_models_dir = '{}intermediate_models/'.format(output_root_dir)
 
     # Create image and model save directory
     if not os.path.exists(output_root_dir):
@@ -264,7 +264,7 @@ if __name__ == "__main__":
     if not os.path.exists(interm_models_save_dir):
         os.mkdir(interm_models_save_dir)
     if not os.path.exists(init_model_save_dir):
-        os.mkdir(init_model_save_dir)    
+        os.mkdir(init_model_save_dir)        
 
     # Save the settings for future reference
     with open('{}/settings.csv'.format(output_root_dir), 'w') as f:
@@ -315,25 +315,20 @@ if __name__ == "__main__":
     initial_hit_perc = 0.70
     num_epochs_till_mask = 10
     prune_perc = 0.10
-    pruning_score_lambda_PPI = 0#0.05 
-    pruning_score_lambda_motif = 0#0.01
     lr_schedule_patience = 3
-    prop_force_to_zero_for_loaded_model = 0
-    consider_multipliers = True
-    weight_resetting = False
     epochs_to_fail_to_start_finetuning = 40
-
+    
     odenet = ODENet(device, data_handler.dim, explicit_time=settings['explicit_time'], neurons = settings['neurons_per_layer'], 
                     log_scale = settings['log_scale'], init_bias_y = settings['init_bias_y'])
     odenet.float()
     torch.save(odenet.state_dict(),"{}/init_model.pt".format(init_model_save_dir))
-    
-    my_current_custom_pruning_scores = {}
-    my_current_custom_pruning_scores['net_prods.linear_out'] = torch.rand(settings['neurons_per_layer'], data_handler.dim)
-    my_current_custom_pruning_scores['net_sums.linear_out'] = torch.rand(settings['neurons_per_layer'], data_handler.dim)
-    my_current_custom_pruning_scores['net_alpha_combine_sums.linear_out'] = torch.rand(data_handler.dim, settings['neurons_per_layer'])
-    my_current_custom_pruning_scores['net_alpha_combine_prods.linear_out'] = torch.rand(data_handler.dim, settings['neurons_per_layer'])
 
+    my_current_custom_pruning_scores = {}
+    my_current_custom_pruning_scores['net_prods.linear_out.weight'] = torch.zeros(settings['neurons_per_layer'], data_handler.dim)
+    my_current_custom_pruning_scores['net_sums.linear_out.weight'] = torch.zeros(settings['neurons_per_layer'], data_handler.dim)
+    my_current_custom_pruning_scores['net_alpha_combine_sums.linear_out.weight'] = torch.zeros(data_handler.dim, settings['neurons_per_layer'])
+    my_current_custom_pruning_scores['net_alpha_combine_prods.linear_out.weight'] = torch.zeros(data_handler.dim, settings['neurons_per_layer'])
+    #my_current_custom_pruning_scores['gene_multipliers.weight'] = torch.zeros(data_handler.dim)
     
     if settings['pretrained_model']:
         pretrained_model_file = '/home/ubuntu/lottery_tickets_phoenix/ode_net/code/output/_holder_model_to_prune/best_val_model.pt'
@@ -375,34 +370,14 @@ if __name__ == "__main__":
         net_file.write('and then lambda = {}'.format(loss_lambda_at_end))
         net_file.write('\n')
         if prune_perc > 0 or initial_hit_perc > 0:
-            if not weight_resetting:
-                net_file.write('MP (with NO weight resetting), i.e. SparseFlow')
-            else:    
-                net_file.write('IMP (with weight resetting)')
-            net_file.write('\n')
-            net_file.write('doing PPI mask + T mask')
-            if consider_multipliers: 
-                net_file.write('\n')
-                net_file.write('.....')
-                net_file.write('Considering multipliers for final layer pruning')   
-                net_file.write('.....')
-            net_file.write('\n')
-            net_file.write('pruning score lambda (PPI, Motif) = ({}, {})'.format(pruning_score_lambda_PPI, pruning_score_lambda_motif))
+            net_file.write('SYNFLOW!')
             net_file.write('\n')
             net_file.write('Initial hit = {} at epoch {}, then prune {} every {} epochs'.format(initial_hit_perc, masking_start_epoch, prune_perc, num_epochs_till_mask))
         else:
             net_file.write('No pruning!')
             net_file.write('\n')
-        if settings['pretrained_model']:
-            net_file.write('\n')
-            net_file.write('LOADED in a pre-trained model but forced lowest {} perc of params to zero'.format(prop_force_to_zero_for_loaded_model*100))
-            if consider_multipliers: 
-                net_file.write('\n')
-                net_file.write('.....')
-                net_file.write('Considering multipliers for forced zeroing of pre-trained model')   
-                net_file.write('.....')
-        net_file.write('\n')
-        net_file.write('Stop pruning and start fine-tuning best_val_model if val-perf plateaus for {} epochs'.format(epochs_to_fail_to_start_finetuning))
+       
+    
     # Init plot
     if settings['viz']:
         visualizer = Visualizator1D(data_handler, odenet, settings)
@@ -441,35 +416,14 @@ if __name__ == "__main__":
     rep_epochs_time_so_far = []
     rep_epochs_so_far = []
     consec_epochs_failed = 0
+    
     all_lrs_used = []
     all_pruning_done = False
+
     
 
-    scheduler = setOptimizerLRScheduler(optimizer = opt, patience=lr_schedule_patience)
+    scheduler = setOptimizerLRScheduler(optimizer = opt , patience=lr_schedule_patience)
 
-    if settings['pretrained_model'] and prop_force_to_zero_for_loaded_model>0:
-        total_pruned = 0
-        total_params = 0
-        for name, module in odenet.named_modules():
-            if isinstance(module, torch.nn.Linear):
-                if name in ['net_alpha_combine_sums.linear_out' , 'net_alpha_combine_prods.linear_out']:
-                    if consider_multipliers:
-                        print("Considering multipliers for zeroing of final layers")
-                        current_NN_weights_abs = abs(module.weight.detach())
-                        current_gene_mult_ReLU = torch.relu(odenet.gene_multipliers.detach().t())
-                        this_loaded_module_prune_score = current_NN_weights_abs * current_gene_mult_ReLU
-                        prune.l1_unstructured(module, name='weight', amount = prop_force_to_zero_for_loaded_model, importance_scores = this_loaded_module_prune_score) #CHANGE THIS!
-                    else:
-                        prune.l1_unstructured(module, name='weight', amount = prop_force_to_zero_for_loaded_model)        
-                else:
-                    prune.l1_unstructured(module, name='weight', amount = prop_force_to_zero_for_loaded_model) 
-                
-                print("SETTING LOWEST {} % OF ELEMENTS in {} TO ZERO".format(prop_force_to_zero_for_loaded_model*100, name))
-                total_params += module.weight.nelement()
-                total_pruned += torch.sum(module.weight == 0)
-        print("Updated mask based on prior! Current perc pruned: {:.2%}, num pruned: {}".format(total_pruned/total_params, total_pruned))
-    
-            
     if settings['viz']:
         with torch.no_grad():
             visualizer.visualize()
@@ -486,91 +440,67 @@ if __name__ == "__main__":
 
 
         #Iterative magnitude pruning (IMP for lottery tickets)
-        if (epoch == masking_start_epoch) or (epoch >= masking_start_epoch and epoch < tot_epochs and epoch % num_epochs_till_mask in [0,0] ):
+        if (epoch == masking_start_epoch) or (epoch == masking_start_epoch +0 ) or (epoch >= masking_start_epoch and epoch < tot_epochs and epoch % num_epochs_till_mask in [0,0]):
             if epoch == masking_start_epoch or epoch == masking_start_epoch + 0:
                 prune_this_epoch = initial_hit_perc
             else:
                 prune_this_epoch = prune_perc
 
+            @torch.no_grad()
+            def linearize(model):
+                # model.double()
+                signs = {}
+                with torch.no_grad():
+                    for name, param in model.state_dict().items():
+                        signs[name] = torch.sign(param)
+                        param.abs_()
+                return signs
+
+            @torch.no_grad()
+            def nonlinearize(model, signs):
+                with torch.no_grad():
+                    for name, param in model.state_dict().items():
+                        param.mul_(signs[name])
+            
+            signs = linearize(odenet)
+
+            input_dim = [data_handler.dim]
+            my_input = torch.ones([1] + input_dim).to(device)
+            
+            opt.zero_grad()
+            my_output = odenet(9999, my_input)
+            torch.sum(my_output).backward()
+            
+            for name, p in odenet.named_parameters():
+                if name in my_current_custom_pruning_scores:
+                    this_grad = p.grad.detach().abs_()
+                    this_param = p.detach().abs_()
+                    #my_current_custom_pruning_scores[name] = torch.clone(this_grad/torch.sum(this_grad) * this_param/torch.sum(this_param)) 
+                    my_current_custom_pruning_scores[name] = torch.clone(p.grad * p).detach().abs_()
+
+            opt.zero_grad()
+
+            nonlinearize(odenet, signs)
+            
             total_pruned = 0
             total_params = 0
 
             for name, module in odenet.named_modules():
-                if isinstance(module, torch.nn.Linear): # and (prune_perc > 0 or initial_hit_perc > 0)
-                    #current_NN_weights = module.weight.detach()
-                    if name == 'net_sums.linear_out': 
-                        current_NN_weights_abs = abs(module.weight.detach()) #GRAD!.detach()
-                        current_NN_weights_abs = current_NN_weights_abs/torch.sum(current_NN_weights_abs) #trying normalization this for PPI layers+
-                        
-
-                    elif name == 'net_prods.linear_out':
-                        current_NN_weights_abs = torch.exp(module.weight.detach()) #GRAD! 
-                        current_NN_weights_abs = current_NN_weights_abs/torch.sum(current_NN_weights_abs) #trying normalization this for PPI layers
-
-                    elif name in ['net_alpha_combine_sums.linear_out','net_alpha_combine_prods.linear_out' ]: 
-                        current_NN_weights_abs = abs(module.weight.detach()) #GRAD!.detach()
-                        if consider_multipliers:
-                            current_gene_mult_ReLU = torch.relu(odenet.gene_multipliers.detach().t())
-                            current_NN_weights_abs = current_NN_weights_abs * current_gene_mult_ReLU
-                        current_NN_weights_abs = current_NN_weights_abs/torch.sum(current_NN_weights_abs) #trying normalization this for PPI layers+
-                    
-                    if name in ['net_sums.linear_out','net_prods.linear_out'] and ((epoch == masking_start_epoch) or epoch % num_epochs_till_mask == 0): #name == 'net_prods.linear_out' or 
-                        
-                        mask_curr = my_current_custom_pruning_scores[name]
-                        S_S_transpose_inv = torch.inverse(torch.matmul(mask_curr, torch.transpose(mask_curr,0,1)))
-                        S_PPI = torch.matmul(mask_curr, noisy_PPI)
-                        S_mask_best_guess = torch.matmul(S_S_transpose_inv, S_PPI)
-                        
-                        updated_score = pruning_score_lambda_PPI * torch.abs(S_mask_best_guess) + (1 - pruning_score_lambda_PPI) * current_NN_weights_abs
-                        
-                        prune.l1_unstructured(module, name='weight', amount=prune_this_epoch, importance_scores = updated_score)
-                        my_current_custom_pruning_scores[name] = updated_score
-                        #print(55)
-                        
-                    elif name in['net_alpha_combine_sums.linear_out', 'net_alpha_combine_prods.linear_out'] and ((epoch == masking_start_epoch +0 ) or (epoch % num_epochs_till_mask == 0)):
-
-                        if name == 'net_alpha_combine_sums.linear_out':
-                            incoming_mask_curr = my_current_custom_pruning_scores['net_sums.linear_out']
-                        else:
-                            incoming_mask_curr = my_current_custom_pruning_scores['net_prods.linear_out']
-                        
-                        T_tranpose_S_transpose = torch.transpose(torch.matmul(incoming_mask_curr,abs(noisy_prior_mat)),0,1)
-                        S_S_transpose_inv = torch.inverse(torch.matmul(incoming_mask_curr, torch.transpose(incoming_mask_curr,0,1)))
-                        C_mask_best_guess = torch.matmul(T_tranpose_S_transpose, S_S_transpose_inv)
-
-                        
-                        updated_score = pruning_score_lambda_motif * torch.abs(C_mask_best_guess)  + (1 - pruning_score_lambda_motif) * current_NN_weights_abs
-                        
-                        #updated_score = mask_T.contiguous()
-                        
-                        prune.l1_unstructured(module, name='weight', amount=prune_this_epoch, importance_scores = updated_score) # 
-                        my_current_custom_pruning_scores[name] = updated_score
-                        
-                    
+                if isinstance(module, torch.nn.Linear):
+                    this_module_score = my_current_custom_pruning_scores[name+'.weight']
+                    prune.l1_unstructured(module, name='weight', amount=prune_this_epoch, importance_scores = this_module_score) #
                     total_params += module.weight.nelement()
                     total_pruned += torch.sum(module.weight == 0)
                     
-                    
-                    
             print("Updated mask based on prior! Current perc pruned: {:.2%}, num pruned: {}".format(total_pruned/total_params, total_pruned))
             
-            if (prune_perc > 0 or initial_hit_perc > 0) and not all_pruning_done: 
-                if weight_resetting:
-                    #RESET OPTIMIZER, SCHEDULER, AND MOST IMPORTANTLY, THE NN.PARAMETERS
-                    original_dict = torch.load("{}/init_model.pt".format(init_model_save_dir), map_location=device)
-                    renamed_original_dict = {key.replace('weight', 'weight_orig'): original_dict[key] for key in original_dict.keys()}
-                    current_dict = odenet.state_dict()
-                    current_dict.update(renamed_original_dict)
-                    odenet.load_state_dict(current_dict)
-                    opt.load_state_dict(torch.load("{}/optimizer.pt".format(init_model_save_dir), map_location=device))
-                    scheduler = setOptimizerLRScheduler(optimizer = opt, patience=lr_schedule_patience)
-                    print("Resetting weights, optimizer, and scheduler to initial state...")
+            if prune_perc > 0 or initial_hit_perc > 0 and not all_pruning_done:
+                reset_lr(opt, True, settings['init_lr']) #, 
+                scheduler = setOptimizerLRScheduler(optimizer = opt, patience = lr_schedule_patience)
+        
+            
 
-                else:
-                    reset_lr(opt, True, settings['init_lr']) #, 
-                    scheduler = setOptimizerLRScheduler(optimizer = opt, patience=lr_schedule_patience)
-                
-
+            
         start_epoch_time = perf_counter()
         iteration_counter = 1
         data_handler.reset_epoch()
@@ -658,8 +588,7 @@ if __name__ == "__main__":
                     save_model(odenet, output_root_dir, 'best_val_model')
                     torch.save(odenet.state_dict(),"{}/best_val_model_dict.pt".format(output_root_dir))
                 else:
-                    if not all_pruning_done:
-                        consec_epochs_failed = consec_epochs_failed + 1
+                    consec_epochs_failed = consec_epochs_failed + 1
 
                     
             print("Validation loss {:.5E}, using {} points".format(val_loss, val_loss_list[1]))
@@ -682,9 +611,8 @@ if __name__ == "__main__":
         #print("Saving intermediate model")
         #save_model(odenet, intermediate_models_dir, 'model_at_epoch{}'.format(epoch))
     
-        
+        # Decrease learning rate if specified
 
-        #val_loss < (0.01 * settings['scale_expression'])**1
         if  (consec_epochs_failed == epochs_to_fail_to_start_finetuning):
             all_pruning_done = True
             print("Went {} epochs without improvement.".format(epochs_to_fail_to_start_finetuning))
@@ -704,8 +632,8 @@ if __name__ == "__main__":
             prune_perc = 0
             consec_epochs_failed = 0
             min_val_loss = torch.tensor(99999)
-            
 
+        #val_loss < (0.01 * settings['scale_expression'])**1
         if (epoch in rep_epochs):
             print()
             rep_epochs_so_far.append(epoch)
@@ -736,8 +664,10 @@ if __name__ == "__main__":
             #print("Saving best intermediate val model..")
             #interm_model_file_name = 'trained_model_epoch_' + str(epoch)
             #save_model(odenet, interm_models_save_dir , interm_model_file_name)
-
-
+                
+            
+           
+        
     total_time = perf_counter() - start_time
 
     
